@@ -1,13 +1,15 @@
-// app/questions/[id]/edit/page.tsx
+// app/questions/[id]/edit/page.tsx (FIXED AUTHENTICATION)
 "use client";
 
 import React from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSelector } from "react-redux";
 import { useAuth } from "../../../../hooks/use-auth";
 import {
   useGetQuestionQuery,
   useUpdateQuestionMutation,
 } from "../../../../lib/store/api/questionsApi";
+import type { RootState } from "../../../../lib/store";
 import {
   Card,
   CardContent,
@@ -26,7 +28,7 @@ import {
   SelectValue,
 } from "../../../../components/ui/select";
 import { Badge } from "../../../../components/ui/badge";
-import { ArrowLeft, FileText, Plus, X } from "lucide-react";
+import { ArrowLeft, FileText, Plus, X, Upload } from "lucide-react";
 import Link from "next/link";
 import { useToastContext } from "../../../../lib/providers/toast-provider";
 import { USER_ROLES } from "../../../../lib/utils/constants";
@@ -35,6 +37,7 @@ interface QuestionOption {
   option_text: string;
   option_order: number;
   is_correct: boolean;
+  option_image?: File | string | null;
 }
 
 export default function EditQuestionPage() {
@@ -42,6 +45,9 @@ export default function EditQuestionPage() {
   const router = useRouter();
   const { user, requireAuth } = useAuth();
   const { toast } = useToastContext();
+
+  // Get token from Redux store
+  const accessToken = useSelector((state: RootState) => state.auth.accessToken);
 
   const {
     data: question,
@@ -64,6 +70,10 @@ export default function EditQuestionPage() {
   const [options, setOptions] = React.useState<QuestionOption[]>([]);
   const [tags, setTags] = React.useState<string[]>([]);
   const [newTag, setNewTag] = React.useState("");
+  const [questionImage, setQuestionImage] = React.useState<File | null>(null);
+  const [currentQuestionImage, setCurrentQuestionImage] = React.useState<
+    string | null
+  >(null);
 
   // Initialize form data when question loads
   React.useEffect(() => {
@@ -82,10 +92,12 @@ export default function EditQuestionPage() {
           option_text: opt.option_text,
           option_order: opt.option_order,
           is_correct: opt.is_correct,
+          option_image: opt.option_image,
         }))
       );
 
       setTags(question.tags.map((tag) => tag.name));
+      setCurrentQuestionImage(question.question_image);
     }
   }, [question]);
 
@@ -155,13 +167,75 @@ export default function EditQuestionPage() {
     }
 
     try {
-      const questionData = {
-        ...formData,
-        options: validOptions,
-        tags: tags.filter((tag) => tag.trim()),
-      };
+      // Check if we have authentication token
+      if (!accessToken) {
+        throw new Error("Authentication required. Please log in again.");
+      }
 
-      await updateQuestion({ id: id as string, data: questionData }).unwrap();
+      // Prepare the data based on whether we have an image or not
+      if (questionImage) {
+        // If we have a new image, use FormData
+        const formDataToSend = new FormData();
+
+        // Add basic fields
+        Object.entries(formData).forEach(([key, value]) => {
+          formDataToSend.append(key, value.toString());
+        });
+
+        // Add question image
+        formDataToSend.append("question_image", questionImage);
+
+        // Add options (without images for now)
+        formDataToSend.append(
+          "options",
+          JSON.stringify(
+            validOptions.map((opt) => ({
+              option_text: opt.option_text,
+              option_order: opt.option_order,
+              is_correct: opt.is_correct,
+            }))
+          )
+        );
+
+        // Add tags
+        formDataToSend.append(
+          "tags",
+          JSON.stringify(tags.filter((tag) => tag.trim()))
+        );
+
+        // Use fetch for FormData
+        const response = await fetch(
+          `http://127.0.0.1:8000/api/questions/questions/${id}/`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              // Don't set Content-Type for FormData - let browser set it
+            },
+            body: formDataToSend,
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.text();
+          throw new Error(
+            `Failed to update question: ${response.status} ${errorData}`
+          );
+        }
+      } else {
+        // If no new image, use RTK Query with JSON
+        const questionData = {
+          ...formData,
+          options: validOptions.map((opt) => ({
+            option_text: opt.option_text,
+            option_order: opt.option_order,
+            is_correct: opt.is_correct,
+          })),
+          tags: tags.filter((tag) => tag.trim()),
+        };
+
+        await updateQuestion({ id: id as string, data: questionData }).unwrap();
+      }
 
       toast({
         title: "Success",
@@ -171,9 +245,11 @@ export default function EditQuestionPage() {
 
       router.push(`/questions/${id}`);
     } catch (error: any) {
+      console.error("Update error:", error);
       toast({
         title: "Error",
-        description: error?.data?.message || "Failed to update question",
+        description:
+          error?.message || error?.data?.message || "Failed to update question",
         variant: "destructive",
       });
     }
@@ -230,6 +306,20 @@ export default function EditQuestionPage() {
 
   const removeTag = (tagToRemove: string) => {
     setTags((prev) => prev.filter((tag) => tag !== tagToRemove));
+  };
+
+  const handleQuestionImageUpload = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setQuestionImage(file);
+    }
+  };
+
+  const removeQuestionImage = () => {
+    setQuestionImage(null);
+    setCurrentQuestionImage(null);
   };
 
   if (isLoadingQuestion) {
@@ -304,6 +394,64 @@ export default function EditQuestionPage() {
                 required
                 rows={4}
               />
+            </div>
+
+            {/* Question Image Upload */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Question Image (Optional)
+              </label>
+              <div className="space-y-4">
+                {/* Current Image Display */}
+                {(currentQuestionImage || questionImage) && (
+                  <div className="relative inline-block">
+                    <img
+                      src={
+                        questionImage
+                          ? URL.createObjectURL(questionImage)
+                          : currentQuestionImage || ""
+                      }
+                      alt="Question"
+                      className="max-w-xs h-auto rounded-lg border"
+                    />
+                    <button
+                      type="button"
+                      onClick={removeQuestionImage}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Upload Button */}
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleQuestionImageUpload}
+                    className="hidden"
+                    id="question-image-upload"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      document.getElementById("question-image-upload")?.click()
+                    }
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {currentQuestionImage || questionImage
+                      ? "Change Image"
+                      : "Upload Image"}
+                  </Button>
+                  {questionImage && (
+                    <span className="text-sm text-muted-foreground">
+                      {questionImage.name}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">

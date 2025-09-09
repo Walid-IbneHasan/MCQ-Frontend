@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "../../../../../components/ui/select";
 import { Badge } from "../../../../../components/ui/badge";
-import { ArrowLeft, FileText, Plus, X } from "lucide-react";
+import { ArrowLeft, FileText, Plus, X, Upload } from "lucide-react";
 import Link from "next/link";
 import { useToastContext } from "../../../../../lib/providers/toast-provider";
 import { USER_ROLES } from "../../../../../lib/utils/constants";
@@ -265,6 +265,58 @@ export default function CreateQuestionPage() {
                 required
                 rows={4}
               />
+            </div>
+
+            {/* Question Image Upload */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Question Image (Optional)
+              </label>
+              <div className="space-y-4">
+                {/* Image Preview */}
+                {questionImage && (
+                  <div className="relative inline-block">
+                    <img
+                      src={URL.createObjectURL(questionImage)}
+                      alt="Question"
+                      className="max-w-xs h-auto rounded-lg border"
+                    />
+                    <button
+                      type="button"
+                      onClick={removeQuestionImage}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Upload Button */}
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleQuestionImageUpload}
+                    className="hidden"
+                    id="question-image-upload"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      document.getElementById("question-image-upload")?.click()
+                    }
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Image
+                  </Button>
+                  {questionImage && (
+                    <span className="text-sm text-muted-foreground">
+                      {questionImage.name}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="space-y-2">
