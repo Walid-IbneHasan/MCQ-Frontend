@@ -1,4 +1,4 @@
-// lib/store/api/questionsApi.ts
+// lib/store/api/questionsApi.ts (FINAL FIX - CORRECT ENDPOINTS)
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { RootState } from '../index';
 
@@ -35,11 +35,18 @@ export interface Question {
   tags: QuestionTag[];
   success_rate: number;
   options_count: number;
-  created_by_name: string;
+  created_by_name?: string;
   created_at: string;
   times_used?: number;
   total_attempts?: number;
   chapter_detail?: any;
+}
+
+// Based on your Postman response
+export interface ChapterQuestionsResponse {
+  success: boolean;
+  chapter: any;
+  questions: Question[];
 }
 
 export interface QuestionsResponse {
@@ -63,7 +70,7 @@ export interface QuestionCreateData {
 }
 
 const baseQuery = fetchBaseQuery({
-  baseUrl: process.env.NEXT_PUBLIC_API_URL?.replace('/auth', '/questions') || 'http://127.0.0.1:8000/api/questions/',
+  baseUrl: 'http://127.0.0.1:8000/api/',
   prepareHeaders: (headers, { getState }) => {
     const token = (getState() as RootState).auth.accessToken;
     if (token) {
@@ -77,9 +84,15 @@ const baseQuery = fetchBaseQuery({
 export const questionsApi = createApi({
   reducerPath: 'questionsApi',
   baseQuery,
-  tagTypes: ['Question', 'QuestionTag'],
+  tagTypes: ['Question', 'QuestionTag', 'Chapter', 'Subject'],
   endpoints: (builder) => ({
-    // Questions endpoints
+    // FIXED: Get questions for a specific chapter (uses subjects API endpoint)
+    getChapterQuestions: builder.query<ChapterQuestionsResponse, string>({
+      query: (chapterId) => `subjects/chapters/${chapterId}/questions/`,
+      providesTags: ['Question'],
+    }),
+
+    // Get all questions with filters (uses questions API endpoint)
     getQuestions: builder.query<QuestionsResponse, { 
       chapter?: string; 
       subject?: string;
@@ -97,13 +110,13 @@ export const questionsApi = createApi({
         if (params.search) searchParams.append('search', params.search);
         if (params.page) searchParams.append('page', params.page.toString());
         
-        return `questions/?${searchParams.toString()}`;
+        return `questions/questions/?${searchParams.toString()}`;
       },
       providesTags: ['Question'],
     }),
 
     getQuestion: builder.query<Question, string>({
-      query: (id) => `questions/${id}/`,
+      query: (id) => `questions/questions/${id}/`,
       providesTags: (result, error, id) => [{ type: 'Question', id }],
     }),
 
@@ -118,23 +131,23 @@ export const questionsApi = createApi({
         if (params.chapter) searchParams.append('chapter', params.chapter);
         if (params.difficulty) searchParams.append('difficulty', params.difficulty);
         
-        return `questions/random/?${searchParams.toString()}`;
+        return `questions/questions/random/?${searchParams.toString()}`;
       },
       providesTags: ['Question'],
     }),
 
     createQuestion: builder.mutation<Question, QuestionCreateData>({
       query: (question) => ({
-        url: 'questions/',
+        url: 'questions/questions/',
         method: 'POST',
         body: question,
       }),
-      invalidatesTags: ['Question'],
+      invalidatesTags: ['Question', 'Chapter', 'Subject'],
     }),
 
     updateQuestion: builder.mutation<Question, { id: string; data: Partial<QuestionCreateData> }>({
       query: ({ id, data }) => ({
-        url: `questions/${id}/`,
+        url: `questions/questions/${id}/`,
         method: 'PATCH',
         body: data,
       }),
@@ -143,7 +156,7 @@ export const questionsApi = createApi({
 
     deleteQuestion: builder.mutation<void, string>({
       query: (id) => ({
-        url: `questions/${id}/`,
+        url: `questions/questions/${id}/`,
         method: 'DELETE',
       }),
       invalidatesTags: ['Question'],
@@ -154,7 +167,7 @@ export const questionsApi = createApi({
       questions: any[];
     }>({
       query: (data) => ({
-        url: 'questions/bulk_create/',
+        url: 'questions/questions/bulk_create/',
         method: 'POST',
         body: data,
       }),
@@ -173,7 +186,7 @@ export const questionsApi = createApi({
         average_time: number;
       };
     }, string>({
-      query: (id) => `questions/${id}/stats/`,
+      query: (id) => `questions/questions/${id}/stats/`,
       providesTags: (result, error, id) => [{ type: 'Question', id }],
     }),
 
@@ -183,19 +196,19 @@ export const questionsApi = createApi({
         const searchParams = new URLSearchParams();
         if (params.search) searchParams.append('search', params.search);
         
-        return `tags/?${searchParams.toString()}`;
+        return `questions/tags/?${searchParams.toString()}`;
       },
       providesTags: ['QuestionTag'],
     }),
 
     getPopularTags: builder.query<{ success: boolean; tags: QuestionTag[] }, void>({
-      query: () => 'tags/popular/',
+      query: () => 'questions/tags/popular/',
       providesTags: ['QuestionTag'],
     }),
 
     createQuestionTag: builder.mutation<QuestionTag, Partial<QuestionTag>>({
       query: (tag) => ({
-        url: 'tags/',
+        url: 'questions/tags/',
         method: 'POST',
         body: tag,
       }),
@@ -204,7 +217,7 @@ export const questionsApi = createApi({
 
     updateQuestionTag: builder.mutation<QuestionTag, { id: string; data: Partial<QuestionTag> }>({
       query: ({ id, data }) => ({
-        url: `tags/${id}/`,
+        url: `questions/tags/${id}/`,
         method: 'PATCH',
         body: data,
       }),
@@ -213,7 +226,7 @@ export const questionsApi = createApi({
 
     deleteQuestionTag: builder.mutation<void, string>({
       query: (id) => ({
-        url: `tags/${id}/`,
+        url: `questions/tags/${id}/`,
         method: 'DELETE',
       }),
       invalidatesTags: ['QuestionTag'],
@@ -222,6 +235,7 @@ export const questionsApi = createApi({
 });
 
 export const {
+  useGetChapterQuestionsQuery,
   useGetQuestionsQuery,
   useGetQuestionQuery,
   useGetRandomQuestionsQuery,

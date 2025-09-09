@@ -1,11 +1,11 @@
-// app/chapters/[id]/questions/page.tsx
+// app/chapters/[id]/questions/page.tsx (MODERN TABULAR VERSION)
 "use client";
 
 import React from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "../../../../hooks/use-auth";
 import { useGetChapterQuery } from "../../../../lib/store/api/subjectsApi";
-import { useGetQuestionsQuery } from "../../../../lib/store/api/questionsApi";
+import { useGetChapterQuestionsQuery } from "../../../../lib/store/api/questionsApi";
 import {
   Card,
   CardContent,
@@ -15,7 +15,22 @@ import {
 } from "../../../../components/ui/card";
 import { Button } from "../../../../components/ui/button";
 import { Badge } from "../../../../components/ui/badge";
-import { ArrowLeft, FileText, Plus, Search } from "lucide-react";
+import {
+  ArrowLeft,
+  FileText,
+  Plus,
+  Search,
+  Eye,
+  Edit,
+  MoreHorizontal,
+  Filter,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../../components/ui/dropdown-menu";
 import Link from "next/link";
 import { USER_ROLES } from "../../../../lib/utils/constants";
 import { Input } from "../../../../components/ui/input";
@@ -31,29 +46,17 @@ export default function ChapterQuestionsPage() {
   const { id } = useParams();
   const { user, requireAuth } = useAuth();
   const [search, setSearch] = React.useState("");
-  // Use a non-empty sentinel so we never pass value="" to SelectItem
-  const [difficulty, setDifficulty] = React.useState<
-    "all" | "easy" | "medium" | "hard"
-  >("all");
+  const [difficulty, setDifficulty] = React.useState("all");
 
   if (!requireAuth()) {
     return null;
   }
 
-  const { data: chapter, isLoading: isLoadingChapter } = useGetChapterQuery(
-    id as string
-  );
-
   const {
     data: questionsResponse,
     isLoading: isLoadingQuestions,
     error: questionsError,
-  } = useGetQuestionsQuery({
-    chapter: id as string,
-    search,
-    // Map "all" to undefined for the API
-    difficulty: difficulty !== "all" ? difficulty : undefined,
-  });
+  } = useGetChapterQuestionsQuery(id as string);
 
   const canManage =
     user?.role &&
@@ -74,12 +77,36 @@ export default function ChapterQuestionsPage() {
     }
   };
 
-  if (isLoadingChapter) {
+  // Filter questions client-side
+  const filteredQuestions = React.useMemo(() => {
+    if (!questionsResponse?.questions) return [];
+
+    let filtered = questionsResponse.questions;
+
+    if (search) {
+      filtered = filtered.filter(
+        (q) =>
+          q.question_text.toLowerCase().includes(search.toLowerCase()) ||
+          q.tags.some((tag) =>
+            tag.name.toLowerCase().includes(search.toLowerCase())
+          )
+      );
+    }
+
+    if (difficulty !== "all") {
+      filtered = filtered.filter((q) => q.difficulty === difficulty);
+    }
+
+    return filtered;
+  }, [questionsResponse?.questions, search, difficulty]);
+
+  if (isLoadingQuestions) {
     return (
       <div className="container mx-auto p-6">
         <div className="animate-pulse space-y-6">
           <div className="h-8 bg-muted rounded w-1/3" />
           <div className="h-32 bg-muted rounded" />
+          <div className="h-96 bg-muted rounded" />
         </div>
       </div>
     );
@@ -103,7 +130,8 @@ export default function ChapterQuestionsPage() {
             Questions
           </h1>
           <p className="text-muted-foreground">
-            {chapter?.name} - Chapter {chapter?.chapter_number}
+            {questionsResponse?.chapter?.name} - Chapter{" "}
+            {questionsResponse?.chapter?.chapter_number}
           </p>
         </div>
         {canManage && (
@@ -129,15 +157,12 @@ export default function ChapterQuestionsPage() {
                 className="pl-10"
               />
             </div>
-            <Select
-              value={difficulty}
-              onValueChange={(v) => setDifficulty(v as typeof difficulty)}
-            >
+            <Select value={difficulty} onValueChange={setDifficulty}>
               <SelectTrigger className="w-full sm:w-48">
+                <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Filter by difficulty" />
               </SelectTrigger>
               <SelectContent>
-                {/* Non-empty sentinel so Radix never receives value="" on an item */}
                 <SelectItem value="all">All Difficulties</SelectItem>
                 <SelectItem value="easy">Easy</SelectItem>
                 <SelectItem value="medium">Medium</SelectItem>
@@ -148,93 +173,166 @@ export default function ChapterQuestionsPage() {
         </CardContent>
       </Card>
 
-      {/* Questions List */}
-      {isLoadingQuestions ? (
-        <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-32 bg-muted animate-pulse rounded-lg" />
-          ))}
-        </div>
-      ) : questionsError ? (
+      {/* Questions Table */}
+      {questionsError ? (
         <Card>
           <CardContent className="p-6 text-center">
             <p className="text-destructive">Failed to load questions.</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              {JSON.stringify(questionsError)}
+            </p>
           </CardContent>
         </Card>
-      ) : questionsResponse?.results && questionsResponse.results.length > 0 ? (
-        <div className="space-y-4">
-          {questionsResponse.results.map((question: any) => (
-            <Card
-              key={question.id}
-              className="hover:shadow-lg transition-shadow"
-            >
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg line-clamp-2">
-                      {question.question_text}
-                    </CardTitle>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Badge
-                        variant="outline"
-                        className={`text-xs ${getDifficultyColor(
-                          question.difficulty
-                        )}`}
-                      >
-                        {question.difficulty}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {question.marks} marks
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {question.options_count} options
-                      </span>
-                      {question.success_rate > 0 && (
-                        <span className="text-sm text-muted-foreground">
-                          {question.success_rate.toFixed(1)}% success rate
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {canManage && (
-                    <div className="flex gap-2">
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={`/questions/${question.id}/edit`}>
-                          Edit
-                        </Link>
-                      </Button>
-                      <Button asChild size="sm">
-                        <Link href={`/questions/${question.id}`}>View</Link>
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              {question.tags && question.tags.length > 0 && (
-                <CardContent className="pt-0">
-                  <div className="flex flex-wrap gap-1">
-                    {question.tags.map((tag: any) => (
-                      <Badge
-                        key={tag.id}
-                        variant="secondary"
-                        className="text-xs"
-                      >
-                        {tag.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-          ))}
-
-          {/* Pagination */}
-          {questionsResponse.next && (
-            <div className="flex justify-center">
-              <Button variant="outline">Load More</Button>
+      ) : filteredQuestions.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Questions List</CardTitle>
+                <CardDescription>
+                  Showing {filteredQuestions.length} of{" "}
+                  {questionsResponse?.questions?.length || 0} questions
+                </CardDescription>
+              </div>
             </div>
-          )}
-        </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="border-b bg-muted/50">
+                  <tr>
+                    <th className="text-left p-4 font-medium text-sm">
+                      Question
+                    </th>
+                    <th className="text-left p-4 font-medium text-sm">
+                      Difficulty
+                    </th>
+                    <th className="text-left p-4 font-medium text-sm">Marks</th>
+                    <th className="text-left p-4 font-medium text-sm">
+                      Options
+                    </th>
+                    <th className="text-left p-4 font-medium text-sm">Tags</th>
+                    <th className="text-left p-4 font-medium text-sm">
+                      Success Rate
+                    </th>
+                    <th className="text-right p-4 font-medium text-sm">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredQuestions.map((question, index) => (
+                    <tr
+                      key={question.id}
+                      className="border-b hover:bg-muted/30 transition-colors"
+                    >
+                      <td className="p-4">
+                        <div className="max-w-md">
+                          <p className="font-medium text-sm line-clamp-2 leading-5">
+                            {question.question_text}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Created{" "}
+                            {new Date(question.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${getDifficultyColor(
+                            question.difficulty
+                          )}`}
+                        >
+                          {question.difficulty}
+                        </Badge>
+                      </td>
+                      <td className="p-4">
+                        <div className="text-sm">
+                          <div className="font-medium">+{question.marks}</div>
+                          <div className="text-xs text-muted-foreground">
+                            -{question.negative_marks}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className="text-sm font-medium">
+                          {question.options_count}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex flex-wrap gap-1 max-w-32">
+                          {question.tags.slice(0, 2).map((tag) => (
+                            <Badge
+                              key={tag.id}
+                              variant="secondary"
+                              className="text-xs"
+                            >
+                              {tag.name}
+                            </Badge>
+                          ))}
+                          {question.tags.length > 2 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{question.tags.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <span className="text-sm">
+                          {question.success_rate > 0
+                            ? `${question.success_rate.toFixed(1)}%`
+                            : "N/A"}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button asChild size="sm" variant="ghost">
+                            <Link href={`/questions/${question.id}`}>
+                              <Eye className="h-4 w-4" />
+                            </Link>
+                          </Button>
+                          {canManage && (
+                            <>
+                              <Button asChild size="sm" variant="ghost">
+                                <Link href={`/questions/${question.id}/edit`}>
+                                  <Edit className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button size="sm" variant="ghost">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/questions/${question.id}`}>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View Details
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem asChild>
+                                    <Link
+                                      href={`/questions/${question.id}/edit`}
+                                    >
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Edit Question
+                                    </Link>
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <Card>
           <CardContent className="p-6 text-center">
