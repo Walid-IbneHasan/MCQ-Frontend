@@ -1,8 +1,9 @@
-// lib/store/index.ts (UPDATED)
+// lib/store/index.ts 
 import { configureStore } from '@reduxjs/toolkit';
 import { authApi } from './api/authApi';
 import { subjectsApi } from './api/subjectsApi';
 import { questionsApi } from './api/questionsApi';
+import { examsApi } from './api/examsApi';
 import authReducer from './slices/authSlice';
 import themeReducer from './slices/themeSlice';
 
@@ -13,6 +14,7 @@ export const store = configureStore({
     [authApi.reducerPath]: authApi.reducer,
     [subjectsApi.reducerPath]: subjectsApi.reducer,
     [questionsApi.reducerPath]: questionsApi.reducer,
+    [examsApi.reducerPath]: examsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -22,7 +24,8 @@ export const store = configureStore({
     }).concat(
       authApi.middleware,
       subjectsApi.middleware,
-      questionsApi.middleware
+      questionsApi.middleware,
+      examsApi.middleware
     ),
 });
 

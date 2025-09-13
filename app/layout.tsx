@@ -1,9 +1,11 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import StoreProvider from "../lib/providers/store-provider";
 import { ThemeProvider } from "../lib/providers/theme-provider";
 import { ToastProvider } from "../lib/providers/toast-provider";
+import { ExamWebSocketProvider } from "../lib/providers/exam-websocket-provider";
 import { Navbar } from "../components/layout/navbar";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -29,10 +31,12 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <ToastProvider>
-              <div className="relative flex min-h-screen flex-col">
-                <Navbar />
-                <main className="flex-1">{children}</main>
-              </div>
+              <ExamWebSocketProvider>
+                <div className="relative flex min-h-screen flex-col">
+                  <Navbar />
+                  <main className="flex-1">{children}</main>
+                </div>
+              </ExamWebSocketProvider>
             </ToastProvider>
           </ThemeProvider>
         </StoreProvider>
