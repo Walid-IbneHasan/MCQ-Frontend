@@ -1,7 +1,7 @@
 // components/exams/QuestionSelectionStep.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -25,7 +25,8 @@ import {
   AlertCircle,
   CheckCircle,
 } from "lucide-react";
-import { useGetChapterQuestionsQuery } from "../../lib/store/api/examsApi";
+import { useGetChapterQuestionsMutation } from "../../lib/store/api/examsApi";
+import type { Chapter } from "../../types/subjects";
 
 interface Question {
   id: string;
@@ -52,6 +53,8 @@ interface NewQuestion {
     is_correct: boolean;
     option_order: number;
   }>;
+  chapter?: string;
+  include_in_exam?: boolean;
 }
 
 interface QuestionSelectionStepProps {
@@ -64,6 +67,8 @@ interface QuestionSelectionStepProps {
   onSelectedQuestionsChange: (questions: string[]) => void;
   onNewQuestionsChange: (questions: NewQuestion[]) => void;
   onRandomQuestionsCountChange: (count: number) => void;
+  chaptersCatalog: Chapter[];
+  chapterLabel?: (id: string) => string;
 }
 
 export function QuestionSelectionStep({
@@ -76,21 +81,28 @@ export function QuestionSelectionStep({
   onSelectedQuestionsChange,
   onNewQuestionsChange,
   onRandomQuestionsCountChange,
+  chaptersCatalog,
+  chapterLabel,
 }: QuestionSelectionStepProps) {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedChapter, setSelectedChapter] = useState("");
-  const [difficultyFilter, setDifficultyFilter] = useState("");
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [selectedChapter, setSelectedChapter] = React.useState<string>("all");
+  const [difficultyFilter, setDifficultyFilter] = React.useState<string>("all");
 
-  const {
-    data: chaptersQuestionsResponse,
-    isLoading,
-    error,
-  } = useGetChapterQuestionsQuery(
-    { chapter_ids: selectedChapters },
-    { skip: selectedChapters.length === 0 }
-  );
+  const [
+    getChapterQuestions,
+    { data: chaptersQuestionsResponse, isLoading, error },
+  ] = useGetChapterQuestionsMutation();
 
-  const chaptersQuestions = chaptersQuestionsResponse?.chapters_questions || {};
+  React.useEffect(() => {
+    if (selectedChapters.length > 0) {
+      getChapterQuestions({ chapter_ids: selectedChapters });
+    }
+  }, [selectedChapters, getChapterQuestions]);
+
+  const chaptersQuestions: Record<
+    string,
+    { count: number; questions: Question[]; chapter_name?: string }
+  > = chaptersQuestionsResponse?.chapters_questions || {};
 
   const handleQuestionToggle = (questionId: string) => {
     const isSelected = selectedQuestions.includes(questionId);
@@ -104,7 +116,7 @@ export function QuestionSelectionStep({
   };
 
   const handleAddNewQuestion = () => {
-    const newQuestion: NewQuestion = {
+    const nq: NewQuestion = {
       id: `new-${Date.now()}`,
       question_text: "",
       difficulty: "medium",
@@ -116,13 +128,15 @@ export function QuestionSelectionStep({
         { option_text: "", is_correct: false, option_order: 3 },
         { option_text: "", is_correct: false, option_order: 4 },
       ],
+      chapter: selectedChapters.length === 1 ? selectedChapters[0] : undefined,
+      include_in_exam: true,
     };
-    onNewQuestionsChange([...newQuestions, newQuestion]);
+    onNewQuestionsChange([...newQuestions, nq]);
   };
 
   const handleNewQuestionChange = (
     index: number,
-    field: string,
+    field: keyof NewQuestion,
     value: any
   ) => {
     const updated = [...newQuestions];
@@ -133,7 +147,7 @@ export function QuestionSelectionStep({
   const handleNewQuestionOptionChange = (
     questionIndex: number,
     optionIndex: number,
-    field: string,
+    field: "option_text" | "is_correct",
     value: any
   ) => {
     const updated = [...newQuestions];
@@ -153,7 +167,7 @@ export function QuestionSelectionStep({
     let allQuestions: Question[] = [];
 
     Object.entries(chaptersQuestions).forEach(([chapterId, data]) => {
-      if (!selectedChapter || selectedChapter === chapterId) {
+      if (selectedChapter === "all" || selectedChapter === chapterId) {
         allQuestions = [...allQuestions, ...(data.questions || [])];
       }
     });
@@ -163,47 +177,45 @@ export function QuestionSelectionStep({
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
       const matchesDifficulty =
-        !difficultyFilter || question.difficulty === difficultyFilter;
+        difficultyFilter === "all" ||
+        question.difficulty === (difficultyFilter as any);
       return matchesSearch && matchesDifficulty;
     });
   }, [chaptersQuestions, selectedChapter, searchTerm, difficultyFilter]);
 
-  const getSelectionSummary = () => {
-    const manualCount = selectedQuestions.length + newQuestions.length;
+  const manualIncludedCount =
+    selectedQuestions.length +
+    newQuestions.filter((q) => q.include_in_exam !== false).length;
 
-    if (questionSelectionMethod === "manual") {
-      return {
-        selected: manualCount,
-        required: totalQuestions,
-        isValid: manualCount >= totalQuestions,
-        message:
-          manualCount < totalQuestions
-            ? `Need ${totalQuestions - manualCount} more questions`
-            : manualCount > totalQuestions
-            ? `${
-                manualCount - totalQuestions
-              } extra questions (only first ${totalQuestions} will be used)`
-            : "Perfect! You have the right number of questions",
-      };
-    } else if (questionSelectionMethod === "mixed") {
-      const total = manualCount + randomQuestionsCount;
-      return {
-        selected: manualCount,
-        random: randomQuestionsCount,
-        total,
-        required: totalQuestions,
-        isValid: total === totalQuestions,
-        message:
-          total !== totalQuestions
-            ? `Manual (${manualCount}) + Random (${randomQuestionsCount}) must equal ${totalQuestions}`
-            : "Perfect balance!",
-      };
-    }
-
-    return null;
-  };
-
-  const summary = getSelectionSummary();
+  const summary =
+    questionSelectionMethod === "manual"
+      ? {
+          selected: manualIncludedCount,
+          required: totalQuestions,
+          isValid: manualIncludedCount >= totalQuestions,
+          message:
+            manualIncludedCount < totalQuestions
+              ? `Need ${totalQuestions - manualIncludedCount} more questions`
+              : manualIncludedCount > totalQuestions
+              ? `${
+                  manualIncludedCount - totalQuestions
+                } extra questions (only first ${totalQuestions} will be used)`
+              : "Perfect! You have the right number of questions",
+        }
+      : questionSelectionMethod === "mixed"
+      ? {
+          selected: manualIncludedCount,
+          random: randomQuestionsCount,
+          total: manualIncludedCount + randomQuestionsCount,
+          required: totalQuestions,
+          isValid:
+            manualIncludedCount + randomQuestionsCount === totalQuestions,
+          message:
+            manualIncludedCount + randomQuestionsCount !== totalQuestions
+              ? `Manual (${manualIncludedCount}) + Random (${randomQuestionsCount}) must equal ${totalQuestions}`
+              : "Perfect balance!",
+        }
+      : null;
 
   if (questionSelectionMethod === "random") {
     return (
@@ -221,9 +233,12 @@ export function QuestionSelectionStep({
     );
   }
 
+  const newQuestionChapterChoices = chaptersCatalog.filter((c) =>
+    selectedChapters.includes(c.id)
+  );
+
   return (
     <div className="space-y-6">
-      {/* Selection Summary */}
       {summary && (
         <Card
           className={summary.isValid ? "border-green-200" : "border-red-200"}
@@ -252,10 +267,7 @@ export function QuestionSelectionStep({
                     onRandomQuestionsCountChange(parseInt(e.target.value) || 0)
                   }
                   min="0"
-                  max={
-                    totalQuestions -
-                    (selectedQuestions.length + newQuestions.length)
-                  }
+                  max={totalQuestions - manualIncludedCount}
                   className="w-32 mt-1"
                 />
               </div>
@@ -294,15 +306,16 @@ export function QuestionSelectionStep({
                     value={selectedChapter}
                     onValueChange={setSelectedChapter}
                   >
-                    <SelectTrigger className="w-48">
+                    <SelectTrigger className="w-56">
                       <SelectValue placeholder="All chapters" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Chapters</SelectItem>
+                      <SelectItem value="all">All Chapters</SelectItem>
                       {Object.entries(chaptersQuestions).map(
                         ([chapterId, data]) => (
                           <SelectItem key={chapterId} value={chapterId}>
-                            Chapter ({data.count} questions)
+                            {data.chapter_name ? data.chapter_name : "Chapter"}{" "}
+                            ({data.count} questions)
                           </SelectItem>
                         )
                       )}
@@ -320,7 +333,7 @@ export function QuestionSelectionStep({
                       <SelectValue placeholder="All" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
                       <SelectItem value="easy">Easy</SelectItem>
                       <SelectItem value="medium">Medium</SelectItem>
                       <SelectItem value="hard">Hard</SelectItem>
@@ -386,13 +399,7 @@ export function QuestionSelectionStep({
                         </div>
                       </div>
 
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          // TODO: Show question preview modal
-                        }}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => {}}>
                         <Eye className="h-4 w-4" />
                       </Button>
                     </div>
@@ -458,12 +465,12 @@ export function QuestionSelectionStep({
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
                     <div>
                       <Label>Difficulty</Label>
                       <Select
                         value={question.difficulty}
-                        onValueChange={(value) =>
+                        onValueChange={(value: "easy" | "medium" | "hard") =>
                           handleNewQuestionChange(
                             questionIndex,
                             "difficulty",
@@ -515,6 +522,50 @@ export function QuestionSelectionStep({
                         step="0.1"
                       />
                     </div>
+
+                    <div>
+                      <Label>Chapter *</Label>
+                      <Select
+                        value={question.chapter ?? "unset"}
+                        onValueChange={(value) =>
+                          handleNewQuestionChange(
+                            questionIndex,
+                            "chapter",
+                            value === "unset" ? undefined : value
+                          )
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select chapter" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unset" disabled>
+                            Select chapter…
+                          </SelectItem>
+                          {newQuestionChapterChoices.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {chapterLabel
+                                ? chapterLabel(c.id)
+                                : `${c.subject_name} — Ch. ${c.chapter_number}: ${c.name}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      checked={question.include_in_exam !== false}
+                      onCheckedChange={(checked) =>
+                        handleNewQuestionChange(
+                          questionIndex,
+                          "include_in_exam",
+                          !!checked
+                        )
+                      }
+                    />
+                    <Label>Include this question in this exam</Label>
                   </div>
 
                   <div>
@@ -533,7 +584,7 @@ export function QuestionSelectionStep({
                                   questionIndex,
                                   optionIndex,
                                   "is_correct",
-                                  checked
+                                  !!checked
                                 )
                               }
                             />
@@ -565,7 +616,7 @@ export function QuestionSelectionStep({
                 <CardContent className="p-6 text-center">
                   <p className="text-muted-foreground">
                     No new questions added yet. Click "Add Question" to create
-                    your first question.
+                    your first question and assign it to a chapter.
                   </p>
                 </CardContent>
               </Card>

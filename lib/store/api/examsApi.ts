@@ -8,6 +8,9 @@ export interface Exam {
   title: string;
   description: string;
   exam_type: 'self_paced' | 'scheduled' | 'practice';
+  question_selection_method?: 'random' | 'manual' | 'mixed';
+  selected_questions?: string[];
+  random_questions_count?: number;
   total_questions: number;
   duration_minutes: number;
   scheduled_start?: string;
@@ -97,6 +100,7 @@ export interface ExamsResponse {
   previous?: string;
 }
 
+// For paginated responses from DRF
 export interface PaginatedExamsResponse {
   count: number;
   next: string | null;
@@ -104,11 +108,28 @@ export interface PaginatedExamsResponse {
   results: ExamsResponse;
 }
 
+export interface NewQuestionData {
+  question_text: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  marks: number;
+  negative_marks: number;
+  chapter?: string;
+  options: {
+    option_text: string;
+    is_correct: boolean;
+    option_order: number;
+  }[];
+}
+
 export interface ExamCreateData {
   title: string;
   description: string;
   exam_type: 'self_paced' | 'scheduled' | 'practice';
   chapters: string[];
+  question_selection_method?: 'random' | 'manual' | 'mixed';
+  selected_questions?: string[];
+  new_questions?: NewQuestionData[];
+  random_questions_count?: number;
   total_questions: number;
   duration_minutes: number;
   time_per_question?: number;
@@ -130,7 +151,42 @@ export interface ExamCreateData {
   grace_period_seconds?: number;
 }
 
+export interface ChapterQuestionsResponse {
+  success: boolean;
+  chapters_questions: {
+    [chapterId: string]: {
+      questions: Question[];
+      count: number;
+    };
+  };
+}
 
+export interface Question {
+  id: string;
+  question_text: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  marks: number;
+  chapter_name: string;
+  subject_name: string;
+  options: Array<{
+    id: string;
+    option_text: string;
+    is_correct: boolean;
+    option_order: number;
+  }>;
+}
+
+export interface QuestionValidationResponse {
+  success: boolean;
+  validation: {
+    is_valid: boolean;
+    errors: string[];
+    warnings: string[];
+    summary: {
+      [key: string]: any;
+    };
+  };
+}
 
 const baseQuery = fetchBaseQuery({
   baseUrl: 'http://127.0.0.1:8000/api/exams/',
@@ -151,24 +207,24 @@ export const examsApi = createApi({
   endpoints: (builder) => ({
     // Exam endpoints
     getExams: builder.query<PaginatedExamsResponse | ExamsResponse, {
-  type?: string;
-  subject?: string;
-  chapter?: string;
-  search?: string;
-  page?: number;
-}>({
-  query: (params = {}) => {
-    const searchParams = new URLSearchParams();
-    if (params.type) searchParams.append('type', params.type);
-    if (params.subject) searchParams.append('subject', params.subject);
-    if (params.chapter) searchParams.append('chapter', params.chapter);
-    if (params.search) searchParams.append('search', params.search);
-    if (params.page) searchParams.append('page', params.page.toString());
-    
-    return `exams/?${searchParams.toString()}`;
-  },
-  providesTags: ['Exam'],
-}),
+      type?: string;
+      subject?: string;
+      chapter?: string;
+      search?: string;
+      page?: number;
+    }>({
+      query: (params = {}) => {
+        const searchParams = new URLSearchParams();
+        if (params.type) searchParams.append('type', params.type);
+        if (params.subject) searchParams.append('subject', params.subject);
+        if (params.chapter) searchParams.append('chapter', params.chapter);
+        if (params.search) searchParams.append('search', params.search);
+        if (params.page) searchParams.append('page', params.page.toString());
+        
+        return `exams/?${searchParams.toString()}`;
+      },
+      providesTags: ['Exam'],
+    }),
 
     getExam: builder.query<{
       success: boolean;
@@ -229,6 +285,39 @@ export const examsApi = createApi({
     }, void>({
       query: () => 'exams/upcoming_exams/',
       providesTags: ['Exam'],
+    }),
+
+    // Question selection endpoints
+    getChapterQuestions: builder.mutation<ChapterQuestionsResponse, { chapter_ids: string[] }>({
+      query: ({ chapter_ids }) => ({
+        url: 'exams/get_chapter_questions/',
+        method: 'POST',
+        body: { chapter_ids },
+      }),
+    }),
+
+    validateQuestionSelection: builder.mutation<QuestionValidationResponse, {
+      question_selection_method: string;
+      selected_questions: string[];
+      new_questions: NewQuestionData[];
+      total_questions: number;
+      chapters: string[];
+      random_questions_count?: number;
+    }>({
+      query: (data) => ({
+        url: 'exams/validate_question_selection/',
+        method: 'POST',
+        body: data,
+      }),
+    }),
+
+    previewExamQuestions: builder.query<{
+      success: boolean;
+      questions: any[];
+      total: number;
+      selection_method: string;
+    }, string>({
+      query: (examId) => `exams/${examId}/preview_questions/`,
     }),
 
     // Exam session endpoints
@@ -453,6 +542,9 @@ export const {
   useDeleteExamMutation,
   useGetMyExamsQuery,
   useGetUpcomingExamsQuery,
+  useGetChapterQuestionsMutation,
+  useValidateQuestionSelectionMutation,
+  usePreviewExamQuestionsQuery,
   useStartExamMutation,
   useGetMySessionsQuery,
   useGetSessionStatusQuery,

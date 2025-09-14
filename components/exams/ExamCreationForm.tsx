@@ -8,17 +8,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
-import { Separator } from "../ui/separator";
 import { useToast } from "../ui/use-toast";
 import { QuestionSelectionStep } from "./QuestionSelectionStep";
-import { ChapterSelector } from "./ChapterSelector"; // Assuming you have this component
+import { ChapterSelector } from "./ChapterSelector";
+import type { Chapter } from "../../types/subjects";
+import { useSelector } from "react-redux";
+import type { RootState } from "../../lib/store";
 
 interface NewQuestion {
+  id?: string;
   question_text: string;
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: "easy" | "medium" | "hard";
   marks: number;
   negative_marks: number;
   options: Array<{
@@ -26,24 +35,34 @@ interface NewQuestion {
     is_correct: boolean;
     option_order: number;
   }>;
+  chapter?: string; // NEW: assign to a chapter
+  include_in_exam?: boolean; // NEW: include in this exam
 }
 
 export function ExamCreationForm() {
   const [createExam, { isLoading }] = useCreateExamMutation();
   const { toast } = useToast();
-  
+  const accessToken = useSelector((state: RootState) => state.auth.accessToken);
+
   // Basic exam info
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [examType, setExamType] = useState<"self_paced" | "scheduled" | "practice">("self_paced");
-  
-  // Question selection
-  const [questionSelectionMethod, setQuestionSelectionMethod] = useState<"random" | "manual" | "mixed">("random");
+  const [examType, setExamType] = useState<
+    "self_paced" | "scheduled" | "practice"
+  >("self_paced");
+
+  // Chapters
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
+  const [chaptersCatalog, setChaptersCatalog] = useState<Chapter[]>([]); // NEW
+
+  // Question selection
+  const [questionSelectionMethod, setQuestionSelectionMethod] = useState<
+    "random" | "manual" | "mixed"
+  >("random");
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
   const [newQuestions, setNewQuestions] = useState<NewQuestion[]>([]);
   const [randomQuestionsCount, setRandomQuestionsCount] = useState(0);
-  
+
   // Exam configuration
   const [totalQuestions, setTotalQuestions] = useState(50);
   const [duration, setDuration] = useState(60);
@@ -51,95 +70,183 @@ export function ExamCreationForm() {
   const [negativeMarking, setNegativeMarking] = useState(true);
   const [negativeMarks, setNegativeMarks] = useState(0.25);
   const [passingPercentage, setPassingPercentage] = useState(60);
-  
+
   // Exam settings
   const [isPublic, setIsPublic] = useState(true);
   const [requiresSubscription, setRequiresSubscription] = useState(true);
   const [allowRetakes, setAllowRetakes] = useState(true);
   const [maxAttempts, setMaxAttempts] = useState(0);
   const [randomizeQuestions, setRandomizeQuestions] = useState(true);
-  
-  // Scheduled exam settings
+
+  // Scheduled
   const [scheduledStart, setScheduledStart] = useState("");
   const [scheduledEnd, setScheduledEnd] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const chapterLabel = (id: string) => {
+    const c = chaptersCatalog.find((x) => x.id === id);
+    if (!c) return id;
+    return `${c.subject_name} — Ch. ${c.chapter_number}: ${c.name}`;
+  };
+
+  const includeNewCount = () =>
+    newQuestions.filter((q) => q.include_in_exam !== false).length;
+
+  const validateBeforeSubmit = () => {
     if (selectedChapters.length === 0) {
       toast({
         title: "Validation Error",
         description: "Please select at least one chapter",
         variant: "destructive",
       });
-      return;
+      return false;
     }
 
-    // Validate question selection
+    // count only those new questions that are marked to include
+    const manualIncluded = selectedQuestions.length + includeNewCount();
+
     if (questionSelectionMethod === "manual") {
-      const totalAvailable = selectedQuestions.length + newQuestions.length;
-      if (totalAvailable < totalQuestions) {
+      if (manualIncluded < totalQuestions) {
         toast({
           title: "Validation Error",
-          description: `Need ${totalQuestions - totalAvailable} more questions for manual selection`,
+          description: `Need ${
+            totalQuestions - manualIncluded
+          } more questions for manual selection`,
           variant: "destructive",
         });
-        return;
+        return false;
       }
     } else if (questionSelectionMethod === "mixed") {
-      const manualCount = selectedQuestions.length + newQuestions.length;
-      if (manualCount + randomQuestionsCount !== totalQuestions) {
+      if (manualIncluded + randomQuestionsCount !== totalQuestions) {
         toast({
           title: "Validation Error",
-          description: "Manual questions + random questions must equal total questions",
+          description:
+            "Manual questions + random questions must equal total questions",
           variant: "destructive",
         });
-        return;
+        return false;
       }
     }
 
-    // Validate new questions
-    for (const question of newQuestions) {
-      if (!question.question_text.trim()) {
+    for (const q of newQuestions) {
+      if (!q.question_text.trim()) {
         toast({
           title: "Validation Error",
           description: "All new questions must have question text",
           variant: "destructive",
         });
-        return;
+        return false;
       }
-
-      const correctOptions = question.options.filter(opt => opt.is_correct);
-      if (correctOptions.length !== 1) {
+      if (!q.chapter) {
         toast({
           title: "Validation Error",
-          description: "Each question must have exactly one correct option",
+          description: "Each new question must be assigned to a chapter.",
           variant: "destructive",
         });
-        return;
+        return false;
       }
-
-      const emptyOptions = question.options.filter(opt => !opt.option_text.trim());
-      if (emptyOptions.length > 0) {
+      const correct = q.options.filter((o) => o.is_correct);
+      if (correct.length !== 1) {
+        toast({
+          title: "Validation Error",
+          description: "Each new question must have exactly one correct option",
+          variant: "destructive",
+        });
+        return false;
+      }
+      const empty = q.options.filter((o) => !o.option_text.trim());
+      if (empty.length > 0) {
         toast({
           title: "Validation Error",
           description: "All options must have text",
           variant: "destructive",
         });
-        return;
+        return false;
       }
     }
+    return true;
+  };
+
+  /**
+   * Create new questions first and return their IDs in the same order
+   * we iterated (so index aligns with newQuestions).
+   */
+  const createNewQuestionsIfAny = async (): Promise<string[]> => {
+    if (!accessToken || newQuestions.length === 0) return [];
+
+    const createdIds: string[] = [];
+
+    for (const q of newQuestions) {
+      const payload = {
+        chapter: q.chapter!,
+        question_text: q.question_text,
+        question_image: null,
+        explanation: "",
+        difficulty: q.difficulty,
+        marks: q.marks,
+        negative_marks: q.negative_marks,
+        allow_negative_marking: true,
+        options: q.options.map((opt) => ({
+          option_text: opt.option_text,
+          option_image: null,
+          option_order: opt.option_order,
+          is_correct: opt.is_correct,
+        })),
+        tags: [],
+      };
+
+      const res = await fetch(
+        "http://127.0.0.1:8000/api/questions/questions/",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Question create failed (${res.status}): ${text}`);
+      }
+      const data = await res.json();
+      // ✅ your API returns { success, message, question: { id: ... } }
+      const id =
+        String(data?.question?.id ?? data?.id ?? data?.question_id ?? "") || "";
+      if (!id) {
+        throw new Error("Question created but no id returned in response");
+      }
+      createdIds.push(id);
+    }
+
+    return createdIds;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateBeforeSubmit()) return;
 
     try {
-      const examData = {
+      // 1) Create new questions first
+      const createdNewQuestionIds = await createNewQuestionsIfAny();
+
+      // 2) Include only those toggled ON
+      const includeNewIds = createdNewQuestionIds.filter((_, idx) => {
+        const original = newQuestions[idx];
+        return original.include_in_exam !== false;
+      });
+
+      // 3) Final selected IDs
+      const questionIds = [...selectedQuestions, ...includeNewIds];
+
+      // 4) Build payload
+      const examData: any = {
         title,
         description,
         exam_type: examType,
         chapters: selectedChapters,
         question_selection_method: questionSelectionMethod,
-        selected_questions: selectedQuestions,
-        new_questions: newQuestions,
-        random_questions_count: randomQuestionsCount,
         total_questions: totalQuestions,
         duration_minutes: duration,
         marks_per_question: marksPerQuestion,
@@ -151,6 +258,11 @@ export function ExamCreationForm() {
         allow_retakes: allowRetakes,
         max_attempts: maxAttempts,
         randomize_questions: randomizeQuestions,
+        random_questions_count: randomQuestionsCount,
+        // IMPORTANT: send selected question IDs under multiple common keys
+        selected_questions: questionIds,
+        selected_question_ids: questionIds,
+        questions: questionIds,
         ...(examType === "scheduled" && {
           scheduled_start: scheduledStart,
           scheduled_end: scheduledEnd,
@@ -158,20 +270,19 @@ export function ExamCreationForm() {
       };
 
       await createExam(examData).unwrap();
-      
+
       toast({
         title: "Success",
         description: "Exam created successfully!",
         variant: "default",
       });
 
-      // Reset form or redirect
       // window.location.href = "/exams";
-      
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error?.data?.error || "Failed to create exam",
+        description:
+          error?.message || error?.data?.error || "Failed to create exam",
         variant: "destructive",
       });
     }
@@ -195,7 +306,7 @@ export function ExamCreationForm() {
               required
             />
           </div>
-          
+
           <div>
             <Label htmlFor="description">Description</Label>
             <Textarea
@@ -210,9 +321,14 @@ export function ExamCreationForm() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Exam Type</Label>
-              <Select value={examType} onValueChange={setExamType}>
+              <Select
+                value={examType}
+                onValueChange={(v: "self_paced" | "scheduled" | "practice") =>
+                  setExamType(v)
+                }
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Choose exam type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="self_paced">Self Paced</SelectItem>
@@ -226,7 +342,9 @@ export function ExamCreationForm() {
               <Label>Question Selection Method</Label>
               <RadioGroup
                 value={questionSelectionMethod}
-                onValueChange={setQuestionSelectionMethod}
+                onValueChange={(v: "random" | "manual" | "mixed") =>
+                  setQuestionSelectionMethod(v)
+                }
                 className="flex gap-4 mt-2"
               >
                 <div className="flex items-center space-x-2">
@@ -281,6 +399,7 @@ export function ExamCreationForm() {
           <ChapterSelector
             selectedChapters={selectedChapters}
             onSelectedChaptersChange={setSelectedChapters}
+            onAvailableChaptersChange={setChaptersCatalog} // NEW
           />
         </CardContent>
       </Card>
@@ -302,6 +421,8 @@ export function ExamCreationForm() {
               onSelectedQuestionsChange={setSelectedQuestions}
               onNewQuestionsChange={setNewQuestions}
               onRandomQuestionsCountChange={setRandomQuestionsCount}
+              chaptersCatalog={chaptersCatalog}
+              chapterLabel={chapterLabel}
             />
           </CardContent>
         </Card>
@@ -320,12 +441,14 @@ export function ExamCreationForm() {
                 id="totalQuestions"
                 type="number"
                 value={totalQuestions}
-                onChange={(e) => setTotalQuestions(parseInt(e.target.value) || 1)}
+                onChange={(e) =>
+                  setTotalQuestions(parseInt(e.target.value) || 1)
+                }
                 min="1"
                 required
               />
             </div>
-            
+
             <div>
               <Label htmlFor="duration">Duration (minutes) *</Label>
               <Input
@@ -345,7 +468,9 @@ export function ExamCreationForm() {
                 type="number"
                 step="0.1"
                 value={marksPerQuestion}
-                onChange={(e) => setMarksPerQuestion(parseFloat(e.target.value) || 1)}
+                onChange={(e) =>
+                  setMarksPerQuestion(parseFloat(e.target.value) || 1)
+                }
                 min="0.1"
               />
             </div>
@@ -358,7 +483,9 @@ export function ExamCreationForm() {
                 id="passingPercentage"
                 type="number"
                 value={passingPercentage}
-                onChange={(e) => setPassingPercentage(parseInt(e.target.value) || 60)}
+                onChange={(e) =>
+                  setPassingPercentage(parseInt(e.target.value) || 60)
+                }
                 min="0"
                 max="100"
               />
@@ -379,7 +506,7 @@ export function ExamCreationForm() {
               <Checkbox
                 id="negativeMarking"
                 checked={negativeMarking}
-                onCheckedChange={setNegativeMarking}
+                onCheckedChange={(checked) => setNegativeMarking(!!checked)}
               />
               <Label htmlFor="negativeMarking">Enable Negative Marking</Label>
             </div>
@@ -393,7 +520,9 @@ export function ExamCreationForm() {
                 type="number"
                 step="0.1"
                 value={negativeMarks}
-                onChange={(e) => setNegativeMarks(parseFloat(e.target.value) || 0)}
+                onChange={(e) =>
+                  setNegativeMarks(parseFloat(e.target.value) || 0)
+                }
                 min="0"
               />
             </div>
@@ -413,7 +542,7 @@ export function ExamCreationForm() {
                 <Checkbox
                   id="isPublic"
                   checked={isPublic}
-                  onCheckedChange={setIsPublic}
+                  onCheckedChange={(checked) => setIsPublic(!!checked)}
                 />
                 <Label htmlFor="isPublic">Public Exam</Label>
               </div>
@@ -422,9 +551,13 @@ export function ExamCreationForm() {
                 <Checkbox
                   id="requiresSubscription"
                   checked={requiresSubscription}
-                  onCheckedChange={setRequiresSubscription}
+                  onCheckedChange={(checked) =>
+                    setRequiresSubscription(!!checked)
+                  }
                 />
-                <Label htmlFor="requiresSubscription">Requires Subscription</Label>
+                <Label htmlFor="requiresSubscription">
+                  Requires Subscription
+                </Label>
               </div>
             </div>
 
@@ -433,7 +566,7 @@ export function ExamCreationForm() {
                 <Checkbox
                   id="allowRetakes"
                   checked={allowRetakes}
-                  onCheckedChange={setAllowRetakes}
+                  onCheckedChange={(checked) => setAllowRetakes(!!checked)}
                 />
                 <Label htmlFor="allowRetakes">Allow Retakes</Label>
               </div>
@@ -442,7 +575,9 @@ export function ExamCreationForm() {
                 <Checkbox
                   id="randomizeQuestions"
                   checked={randomizeQuestions}
-                  onCheckedChange={setRandomizeQuestions}
+                  onCheckedChange={(checked) =>
+                    setRandomizeQuestions(!!checked)
+                  }
                 />
                 <Label htmlFor="randomizeQuestions">Randomize Questions</Label>
               </div>
@@ -451,7 +586,6 @@ export function ExamCreationForm() {
         </CardContent>
       </Card>
 
-      {/* Submit Button */}
       <div className="flex justify-end gap-4">
         <Button type="button" variant="outline">
           Cancel
