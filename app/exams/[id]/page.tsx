@@ -1,4 +1,4 @@
-// app/exams/[id]/page.tsx
+// app/exams/[id]/page.tsx - Updated with analytics link
 "use client";
 
 import React from "react";
@@ -31,6 +31,8 @@ import {
   RotateCcw,
   CheckCircle,
   XCircle,
+  BarChart3,
+  Settings,
 } from "lucide-react";
 import Link from "next/link";
 import { useToastContext } from "../../../lib/providers/toast-provider";
@@ -207,10 +209,16 @@ export default function ExamDetailPage() {
             {canManage && (
               <div className="flex gap-2">
                 <Button asChild variant="outline" size="sm">
-                  <Link href={`/exams/${exam.id}/edit`}>Edit</Link>
+                  <Link href={`/exams/${exam.id}/edit`}>
+                    <Settings className="h-4 w-4 mr-1" />
+                    Edit
+                  </Link>
                 </Button>
                 <Button asChild size="sm">
-                  <Link href={`/exams/${exam.id}/analytics`}>Analytics</Link>
+                  <Link href={`/exams/${exam.id}/analytics`}>
+                    <BarChart3 className="h-4 w-4 mr-1" />
+                    Analytics
+                  </Link>
                 </Button>
               </div>
             )}

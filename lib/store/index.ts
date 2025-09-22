@@ -4,6 +4,9 @@ import { authApi } from './api/authApi';
 import { subjectsApi } from './api/subjectsApi';
 import { questionsApi } from './api/questionsApi';
 import { examsApi } from './api/examsApi';
+import { resultsApi } from './api/resultsApi';
+import { examAnalyticsApi } from './api/examAnalyticsApi';
+import { leaderboardsApi } from './api/leaderboardsApi';
 import authReducer from './slices/authSlice';
 import themeReducer from './slices/themeSlice';
 
@@ -15,6 +18,9 @@ export const store = configureStore({
     [subjectsApi.reducerPath]: subjectsApi.reducer,
     [questionsApi.reducerPath]: questionsApi.reducer,
     [examsApi.reducerPath]: examsApi.reducer,
+    [examAnalyticsApi.reducerPath]: examAnalyticsApi.reducer,
+    [resultsApi.reducerPath]: resultsApi.reducer,
+    [leaderboardsApi.reducerPath]: leaderboardsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -25,7 +31,11 @@ export const store = configureStore({
       authApi.middleware,
       subjectsApi.middleware,
       questionsApi.middleware,
-      examsApi.middleware
+      examsApi.middleware,
+      examAnalyticsApi.middleware,
+      resultsApi.middleware,
+      leaderboardsApi.middleware,
+
     ),
 });
 

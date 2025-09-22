@@ -1,8 +1,80 @@
-// lib/store/api/examsApi.ts
+// lib/store/api/examsApi.ts - Enhanced with result calculation
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { RootState } from '../index';
 
-// Types for Exams
+// Enhanced types for detailed results
+export interface DetailedExamResult {
+  success: boolean;
+  session: ExamSession;
+  result: ExamResultData | null;
+  question_analysis: QuestionAnalysis[];
+  performance_summary: PerformanceSummary;
+}
+
+export interface QuestionAnalysis {
+  question_id: string;
+  question_text: string;
+  question_number: number;
+  user_answer_id: string | null;
+  user_answer_text: string | null;
+  correct_answer_id: string;
+  correct_answer_text: string;
+  is_correct: boolean;
+  marks_awarded: number;
+  time_spent_seconds: number;
+  difficulty: string;
+  chapter_name: string;
+  subject_name: string;
+  explanation?: string;
+  all_options: Array<{
+    id: string;
+    text: string;
+    is_correct: boolean;
+    order: number;
+  }>;
+}
+
+export interface PerformanceSummary {
+  total_questions: number;
+  attempted_questions: number;
+  correct_answers: number;
+  wrong_answers: number;
+  unanswered: number;
+  accuracy_percentage: number;
+  completion_percentage: number;
+  average_time_per_question: number;
+  difficulty_breakdown: {
+    easy: { attempted: number; correct: number };
+    medium: { attempted: number; correct: number };
+    hard: { attempted: number; correct: number };
+  };
+  subject_breakdown: {
+    [subject: string]: {
+      attempted: number;
+      correct: number;
+      total_marks: number;
+      obtained_marks: number;
+    };
+  };
+}
+
+export interface ExamResultData {
+  id: string;
+  total_questions: number;
+  attempted_questions: number;
+  correct_answers: number;
+  wrong_answers: number;
+  unanswered_questions: number;
+  total_marks: number;
+  marks_obtained: number;
+  negative_marks: number;
+  score_percentage: number;
+  is_passed: boolean;
+  grade: string;
+  time_taken_seconds: number;
+}
+
+// Existing interfaces...
 export interface Exam {
   id: string;
   title: string;
@@ -67,7 +139,15 @@ export interface ExamQuestion {
     marks: number;
     negative_marks: number;
     explanation?: string;
+    chapter_name?: string;
+    subject_name?: string;
     tags: any[];
+    options?: Array<{
+      id: string;
+      option_text: string;
+      is_correct: boolean;
+      option_order: number;
+    }>;
   };
   options: {
     id: string;
@@ -92,6 +172,29 @@ export interface ExamAnswer {
   answered_at: string;
 }
 
+export interface BulkSubmitResponse {
+  success: boolean;
+  message: string;
+  successful_submissions: number;
+  failed_submissions: number;
+  errors: string[];
+  answer_details: Array<{
+    question_id: string;
+    question_text: string;
+    selected_option_id: string;
+    selected_option_text: string;
+    chapter_name: string;
+    subject_name: string;
+    time_spent_seconds: number;
+  }>;
+  session_progress: {
+    total_questions: number;
+    answered_questions: number;
+    progress_percentage: number;
+  };
+}
+
+// Rest of existing interfaces...
 export interface ExamsResponse {
   success: boolean;
   exams: Exam[];
@@ -100,7 +203,6 @@ export interface ExamsResponse {
   previous?: string;
 }
 
-// For paginated responses from DRF
 export interface PaginatedExamsResponse {
   count: number;
   next: string | null;
@@ -410,6 +512,23 @@ export const examsApi = createApi({
         `sessions/${sessionId}/questions/${questionNumber}/`,
     }),
 
+    // Enhanced bulk submit with detailed response
+    bulkSubmitAnswers: builder.mutation<BulkSubmitResponse, {
+      sessionId: string;
+      answers: Array<{
+        question_id: string;
+        selected_option_id: string | null;
+        time_spent_seconds: number;
+      }>;
+    }>({
+      query: ({ sessionId, answers }) => ({
+        url: `sessions/${sessionId}/bulk_submit_answers/`,
+        method: 'POST',
+        body: { answers },
+      }),
+      invalidatesTags: ['ExamAnswer'],
+    }),
+
     // Answer submission
     submitAnswer: builder.mutation<{
       success: boolean;
@@ -454,6 +573,7 @@ export const examsApi = createApi({
       };
     }, string>({
       query: (sessionId) => `sessions/${sessionId}/timer/`,
+      providesTags: (result, error, sessionId) => [{ type: 'ExamSession', id: sessionId }],
     }),
 
     getSessionProgress: builder.query<{
@@ -469,18 +589,21 @@ export const examsApi = createApi({
       };
     }, string>({
       query: (sessionId) => `sessions/${sessionId}/progress/`,
+      providesTags: (result, error, sessionId) => [{ type: 'ExamSession', id: sessionId }],
     }),
 
-    // Final submission
+    // Enhanced submit exam with immediate result calculation
     submitExam: builder.mutation<{
       success: boolean;
       message: string;
       session_id: string;
-    }, { sessionId: string; answers?: any[] }>({
-      query: ({ sessionId, answers }) => ({
+      result?: ExamResultData;
+    }, {
+      sessionId: string;
+    }>({
+      query: ({ sessionId }) => ({
         url: `sessions/${sessionId}/submit_exam/`,
         method: 'POST',
-        body: answers ? { answers } : {},
       }),
       invalidatesTags: ['ExamSession', 'ExamAnswer'],
     }),
@@ -523,13 +646,131 @@ export const examsApi = createApi({
       invalidatesTags: (result, error, { sessionId }) => [{ type: 'ExamSession', id: sessionId }],
     }),
 
-    // Session report
+    // Enhanced session report with detailed analysis
     generateSessionReport: builder.query<{
       success: boolean;
       session: ExamSession;
-      result: any;
+      result: ExamResultData | null;
     }, string>({
       query: (sessionId) => `sessions/${sessionId}/generate_report/`,
+    }),
+
+    // New endpoint for detailed result analysis
+    getDetailedResults: builder.query<DetailedExamResult, string>({
+      queryFn: async (sessionId, api, extraOptions, baseQuery) => {
+        try {
+          // Get session report
+          const reportResult = await baseQuery(`sessions/${sessionId}/generate_report/`);
+          if (reportResult.error) return { error: reportResult.error };
+
+          // Get session answers
+          const answersResult = await baseQuery(`sessions/${sessionId}/answer/`);
+          if (answersResult.error) return { error: answersResult.error };
+
+          // Get session questions
+          const questionsResult = await baseQuery(`sessions/${sessionId}/questions/`);
+          if (questionsResult.error) return { error: questionsResult.error };
+
+          const report = reportResult.data as any;
+          const answers = answersResult.data as any;
+          const questions = questionsResult.data as any;
+
+          // Process detailed results
+          const questionAnalysis: QuestionAnalysis[] = questions.questions.map((question: any, index: number) => {
+            const userAnswer = answers.answers.find((a: any) => a.question === question.question_detail.id);
+            const correctOption = question.question_detail.options?.find((opt: any) => opt.is_correct) || 
+                                  question.options.find((opt: any) => opt.is_correct);
+            const userSelectedOption = question.options.find((opt: any) => opt.id === userAnswer?.selected_option);
+
+            return {
+              question_id: question.question_detail.id,
+              question_text: question.question_detail.question_text,
+              question_number: index + 1,
+              user_answer_id: userAnswer?.selected_option || null,
+              user_answer_text: userSelectedOption?.option_text || null,
+              correct_answer_id: correctOption?.id || '',
+              correct_answer_text: correctOption?.option_text || '',
+              is_correct: userAnswer?.is_correct || false,
+              marks_awarded: userAnswer?.marks_awarded || 0,
+              time_spent_seconds: userAnswer?.time_spent_seconds || 0,
+              difficulty: question.question_detail.difficulty,
+              chapter_name: question.question_detail.chapter_name || 'Unknown Chapter',
+              subject_name: question.question_detail.subject_name || 'Unknown Subject',
+              explanation: question.question_detail.explanation,
+              all_options: question.options.map((opt: any) => ({
+                id: opt.id,
+                text: opt.option_text,
+                is_correct: question.question_detail.options?.find((o: any) => o.id === opt.id)?.is_correct || false,
+                order: opt.option_order,
+              })),
+            };
+          });
+
+          // Calculate performance summary
+          const correctAnswers = questionAnalysis.filter(q => q.is_correct).length;
+          const wrongAnswers = questionAnalysis.filter(q => !q.is_correct && q.user_answer_id !== null).length;
+          const unanswered = questionAnalysis.filter(q => q.user_answer_id === null).length;
+
+          const performanceSummary: PerformanceSummary = {
+            total_questions: questionAnalysis.length,
+            attempted_questions: correctAnswers + wrongAnswers,
+            correct_answers: correctAnswers,
+            wrong_answers: wrongAnswers,
+            unanswered,
+            accuracy_percentage: correctAnswers + wrongAnswers > 0 ? (correctAnswers / (correctAnswers + wrongAnswers)) * 100 : 0,
+            completion_percentage: (correctAnswers + wrongAnswers) / questionAnalysis.length * 100,
+            average_time_per_question: report.session.time_spent_seconds / questionAnalysis.length,
+            difficulty_breakdown: {
+              easy: { attempted: 0, correct: 0 },
+              medium: { attempted: 0, correct: 0 },
+              hard: { attempted: 0, correct: 0 },
+            },
+            subject_breakdown: {},
+          };
+
+          // Calculate difficulty and subject breakdowns
+          questionAnalysis.forEach(q => {
+            // Difficulty breakdown
+            if (q.user_answer_id !== null) {
+              performanceSummary.difficulty_breakdown[q.difficulty as keyof typeof performanceSummary.difficulty_breakdown].attempted++;
+              if (q.is_correct) {
+                performanceSummary.difficulty_breakdown[q.difficulty as keyof typeof performanceSummary.difficulty_breakdown].correct++;
+              }
+            }
+
+            // Subject breakdown
+            if (!performanceSummary.subject_breakdown[q.subject_name]) {
+              performanceSummary.subject_breakdown[q.subject_name] = {
+                attempted: 0,
+                correct: 0,
+                total_marks: 0,
+                obtained_marks: 0,
+              };
+            }
+            
+            if (q.user_answer_id !== null) {
+              performanceSummary.subject_breakdown[q.subject_name].attempted++;
+              performanceSummary.subject_breakdown[q.subject_name].obtained_marks += q.marks_awarded;
+              if (q.is_correct) {
+                performanceSummary.subject_breakdown[q.subject_name].correct++;
+              }
+            }
+            performanceSummary.subject_breakdown[q.subject_name].total_marks += q.marks_awarded > 0 ? q.marks_awarded : 1;
+          });
+
+          return {
+            data: {
+              success: true,
+              session: report.session,
+              result: report.result,
+              question_analysis: questionAnalysis,
+              performance_summary: performanceSummary,
+            }
+          };
+        } catch (error) {
+          return { error: { status: 'FETCH_ERROR', error: String(error) } };
+        }
+      },
     }),
   }),
 });
@@ -554,6 +795,7 @@ export const {
   useGetSessionQuestionsQuery,
   useGetSessionQuestionQuery,
   useSubmitAnswerMutation,
+  useBulkSubmitAnswersMutation,
   useGetSessionAnswersQuery,
   useGetSessionTimerQuery,
   useGetSessionProgressQuery,
@@ -562,4 +804,5 @@ export const {
   useClearReviewMutation,
   useNavigateToQuestionMutation,
   useGenerateSessionReportQuery,
+  useGetDetailedResultsQuery,
 } = examsApi;

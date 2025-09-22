@@ -8,34 +8,25 @@ export interface Toast {
   duration?: number;
 }
 
-export const useToast = () => {
+export function useToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const toast = useCallback(
-    ({
-      title,
-      description,
-      variant = 'default',
-      duration = 5000,
-    }: Omit<Toast, 'id'>) => {
-      const id = Math.random().toString(36).substr(2, 9);
-      const newToast: Toast = { id, title, description, variant, duration };
+  const toast = useCallback((toast: Omit<Toast, 'id'>) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    const newToast = { ...toast, id };
+    
+    setToasts((prev) => [...prev, newToast]);
 
-      setToasts((prev) => [...prev, newToast]);
+    // Auto dismiss after duration
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, toast.duration || 5000);
 
-      if (duration > 0) {
-        setTimeout(() => {
-          setToasts((prev) => prev.filter((toast) => toast.id !== id));
-        }, duration);
-      }
-
-      return id;
-    },
-    []
-  );
+    return id;
+  }, []);
 
   const dismiss = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const dismissAll = useCallback(() => {
@@ -48,4 +39,4 @@ export const useToast = () => {
     dismiss,
     dismissAll,
   };
-};
+}

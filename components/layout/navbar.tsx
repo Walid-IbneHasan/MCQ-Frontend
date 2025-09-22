@@ -66,6 +66,7 @@ export function Navbar() {
       { href: ROUTES.DASHBOARD, label: "Dashboard", icon: BarChart3 },
       { href: "/subjects", label: "Subjects", icon: BookOpen },
       { href: "/exams", label: "Exams", icon: Trophy },
+      { href: "/leaderboards", label: "Leaderboards", icon: Trophy },
     ];
 
     if (
@@ -161,7 +162,7 @@ export function Navbar() {
           <Button
             variant="ghost"
             size="icon"
-            className="relative"
+            className="relative hover:cursor-pointer"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" aria-hidden="true" />
@@ -240,6 +241,7 @@ export function Navbar() {
               size="icon"
               onClick={handleLogout}
               aria-label="Logout"
+              className="hover:cursor-pointer"
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
               <span className="sr-only">Logout</span>
