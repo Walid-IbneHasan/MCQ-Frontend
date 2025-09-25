@@ -1,4 +1,4 @@
-// app/questions/[id]/edit/page.tsx (FIXED AUTHENTICATION)
+// app/questions/[id]/edit/page.tsx (UPDATED WITH IMAGE UTILS)
 "use client";
 
 import React from "react";
@@ -9,6 +9,7 @@ import {
   useGetQuestionQuery,
   useUpdateQuestionMutation,
 } from "../../../../lib/store/api/questionsApi";
+import { getImageUrl } from "../../../../lib/utils/imageUtils";
 import type { RootState } from "../../../../lib/store";
 import {
   Card,
@@ -409,10 +410,17 @@ export default function EditQuestionPage() {
                       src={
                         questionImage
                           ? URL.createObjectURL(questionImage)
-                          : currentQuestionImage || ""
+                          : getImageUrl(currentQuestionImage) || ""
                       }
                       alt="Question"
                       className="max-w-xs h-auto rounded-lg border"
+                      onError={(e) => {
+                        console.error(
+                          "Failed to load image:",
+                          currentQuestionImage
+                        );
+                        e.currentTarget.style.display = "none";
+                      }}
                     />
                     <button
                       type="button"
@@ -500,7 +508,7 @@ export default function EditQuestionPage() {
                   type="number"
                   min="0.1"
                   max="10"
-                  step="0.1"
+                  step="0.05"
                   value={formData.marks}
                   onChange={(e) =>
                     handleInputChange("marks", parseFloat(e.target.value))
@@ -518,7 +526,7 @@ export default function EditQuestionPage() {
                   type="number"
                   min="0"
                   max="5"
-                  step="0.1"
+                  step="0.05"
                   value={formData.negative_marks}
                   onChange={(e) =>
                     handleInputChange(

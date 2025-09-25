@@ -1,4 +1,4 @@
-// app/questions/[id]/page.tsx
+// app/questions/[id]/page.tsx (FIXED IMAGE DISPLAY)
 "use client";
 
 import React from "react";
@@ -46,6 +46,17 @@ export default function QuestionDetailPage() {
     [USER_ROLES.TEACHER, USER_ROLES.MODERATOR, USER_ROLES.ADMIN].includes(
       user.role
     );
+
+  // Helper function to get full image URL
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return null;
+    // If it's already a full URL, return as is
+    if (imagePath.startsWith("http")) return imagePath;
+    // If it starts with /, it's an absolute path from the domain
+    if (imagePath.startsWith("/")) return `http://127.0.0.1:8000${imagePath}`;
+    // Otherwise, assume it's relative to media
+    return `http://127.0.0.1:8000/media/${imagePath}`;
+  };
 
   const handleDelete = async () => {
     if (window.confirm(`Are you sure you want to delete this question?`)) {
@@ -157,7 +168,10 @@ export default function QuestionDetailPage() {
             {canManage && (
               <div className="flex gap-2">
                 <Button asChild variant="outline">
-                  <Link href={`/questions/${question.id}/edit`}>
+                  <Link
+                    href={`/questions/${question.id}/edit`}
+                    className="flex items-center"
+                  >
                     <Edit className="h-4 w-4 mr-2" />
                     Edit
                   </Link>
@@ -183,11 +197,20 @@ export default function QuestionDetailPage() {
             <CardTitle>Question Image</CardTitle>
           </CardHeader>
           <CardContent>
-            <img
-              src={question.question_image}
-              alt="Question"
-              className="max-w-full h-auto rounded-lg"
-            />
+            <div className="flex justify-center">
+              <img
+                src={getImageUrl(question.question_image)}
+                alt="Question"
+                className="max-w-full h-auto rounded-lg border shadow-sm"
+                onError={(e) => {
+                  console.error(
+                    "Failed to load image:",
+                    question.question_image
+                  );
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            </div>
           </CardContent>
         </Card>
       )}
@@ -213,13 +236,22 @@ export default function QuestionDetailPage() {
                     {String.fromCharCode(65 + index)}.
                   </span>
                   <div className="flex-1">
-                    <p className="text-gray-900">{option.option_text}</p>
+                    <p className="text-gray-900 mb-2">{option.option_text}</p>
                     {option.option_image && (
-                      <img
-                        src={option.option_image}
-                        alt={`Option ${String.fromCharCode(65 + index)}`}
-                        className="mt-2 max-w-xs h-auto rounded"
-                      />
+                      <div className="mt-2">
+                        <img
+                          src={getImageUrl(option.option_image)}
+                          alt={`Option ${String.fromCharCode(65 + index)}`}
+                          className="max-w-xs h-auto rounded border"
+                          onError={(e) => {
+                            console.error(
+                              "Failed to load option image:",
+                              option.option_image
+                            );
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </div>
                     )}
                   </div>
                   {option.is_correct && (

@@ -502,7 +502,7 @@ export function QuestionSelectionStep({
                           )
                         }
                         min="0.1"
-                        step="0.1"
+                        step="0.05"
                       />
                     </div>
 
@@ -519,7 +519,7 @@ export function QuestionSelectionStep({
                           )
                         }
                         min="0"
-                        step="0.1"
+                        step="0.05"
                       />
                     </div>
 

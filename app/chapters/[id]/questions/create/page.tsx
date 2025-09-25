@@ -384,7 +384,7 @@ export default function CreateQuestionPage() {
                   type="number"
                   min="0.1"
                   max="10"
-                  step="0.1"
+                  step="0.05"
                   value={formData.marks}
                   onChange={(e) =>
                     handleInputChange("marks", parseFloat(e.target.value))

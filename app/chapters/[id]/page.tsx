@@ -118,7 +118,10 @@ export default function ChapterDetailPage() {
                       <Link href={`/chapters/${chapter.id}/edit`}>Edit</Link>
                     </Button>
                     <Button asChild size="sm">
-                      <Link href={`/chapters/${chapter.id}/questions/create`}>
+                      <Link
+                        href={`/chapters/${chapter.id}/questions/create`}
+                        className="flex items-center"
+                      >
                         <Plus className="h-4 w-4 mr-2" />
                         Add Question
                       </Link>

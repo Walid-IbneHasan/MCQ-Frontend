@@ -1,4 +1,4 @@
-// components/exams/ExamCreationForm.tsx
+// components/exams/ExamCreationForm.tsx (FIXED TO USE FORMDATA)
 "use client";
 
 import React, { useState } from "react";
@@ -167,8 +167,7 @@ export function ExamCreationForm() {
   };
 
   /**
-   * Create new questions first and return their IDs in the same order
-   * we iterated (so index aligns with newQuestions).
+   * Create new questions using FormData (like the regular question creation)
    */
   const createNewQuestionsIfAny = async (): Promise<string[]> => {
     if (!accessToken || newQuestions.length === 0) return [];
@@ -176,23 +175,32 @@ export function ExamCreationForm() {
     const createdIds: string[] = [];
 
     for (const q of newQuestions) {
-      const payload = {
-        chapter: q.chapter!,
-        question_text: q.question_text,
-        question_image: null,
-        explanation: "",
-        difficulty: q.difficulty,
-        marks: q.marks,
-        negative_marks: q.negative_marks,
-        allow_negative_marking: true,
-        options: q.options.map((opt) => ({
-          option_text: opt.option_text,
-          option_image: null,
-          option_order: opt.option_order,
-          is_correct: opt.is_correct,
-        })),
-        tags: [],
-      };
+      // Create FormData for the question (consistent with regular question creation)
+      const formData = new FormData();
+
+      // Add basic fields
+      formData.append("chapter", q.chapter!);
+      formData.append("question_text", q.question_text);
+      formData.append("difficulty", q.difficulty);
+      formData.append("marks", q.marks.toString());
+      formData.append("negative_marks", q.negative_marks.toString());
+      formData.append("allow_negative_marking", "true");
+      formData.append("explanation", ""); // Empty explanation for now
+
+      // Add options as JSON string (consistent with existing question creation)
+      formData.append(
+        "options",
+        JSON.stringify(
+          q.options.map((opt) => ({
+            option_text: opt.option_text,
+            option_order: opt.option_order,
+            is_correct: opt.is_correct,
+          }))
+        )
+      );
+
+      // Add empty tags as JSON string
+      formData.append("tags", JSON.stringify([]));
 
       const res = await fetch(
         "http://127.0.0.1:8000/api/questions/questions/",
@@ -200,9 +208,9 @@ export function ExamCreationForm() {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
+            // Don't set Content-Type for FormData - let browser set it
           },
-          body: JSON.stringify(payload),
+          body: formData,
         }
       );
 
@@ -210,8 +218,8 @@ export function ExamCreationForm() {
         const text = await res.text();
         throw new Error(`Question create failed (${res.status}): ${text}`);
       }
+
       const data = await res.json();
-      // ✅ your API returns { success, message, question: { id: ... } }
       const id =
         String(data?.question?.id ?? data?.id ?? data?.question_id ?? "") || "";
       if (!id) {
@@ -228,7 +236,7 @@ export function ExamCreationForm() {
     if (!validateBeforeSubmit()) return;
 
     try {
-      // 1) Create new questions first
+      // 1) Create new questions first using FormData
       const createdNewQuestionIds = await createNewQuestionsIfAny();
 
       // 2) Include only those toggled ON
@@ -240,7 +248,7 @@ export function ExamCreationForm() {
       // 3) Final selected IDs
       const questionIds = [...selectedQuestions, ...includeNewIds];
 
-      // 4) Build payload
+      // 4) Build exam payload (this can stay as JSON since it's not creating individual questions)
       const examData: any = {
         title,
         description,
@@ -259,7 +267,7 @@ export function ExamCreationForm() {
         max_attempts: maxAttempts,
         randomize_questions: randomizeQuestions,
         random_questions_count: randomQuestionsCount,
-        // IMPORTANT: send selected question IDs under multiple common keys
+        // IMPORTANT: send selected question IDs
         selected_questions: questionIds,
         selected_question_ids: questionIds,
         questions: questionIds,
@@ -277,8 +285,10 @@ export function ExamCreationForm() {
         variant: "default",
       });
 
-      // window.location.href = "/exams";
+      // Redirect to exams page
+      window.location.href = "/exams";
     } catch (error: any) {
+      console.error("Exam creation error:", error);
       toast({
         title: "Error",
         description:
@@ -466,7 +476,7 @@ export function ExamCreationForm() {
               <Input
                 id="marksPerQuestion"
                 type="number"
-                step="0.1"
+                step="0.05"
                 value={marksPerQuestion}
                 onChange={(e) =>
                   setMarksPerQuestion(parseFloat(e.target.value) || 1)
@@ -518,7 +528,7 @@ export function ExamCreationForm() {
               <Input
                 id="negativeMarks"
                 type="number"
-                step="0.1"
+                step="0.05"
                 value={negativeMarks}
                 onChange={(e) =>
                   setNegativeMarks(parseFloat(e.target.value) || 0)

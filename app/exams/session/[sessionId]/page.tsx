@@ -1,4 +1,4 @@
-// app/exams/session/[sessionId]/page.tsx
+// app/exams/session/[sessionId]/page.tsx (FIXED WITH IMAGE SUPPORT)
 "use client";
 
 import React from "react";
@@ -13,6 +13,7 @@ import {
   useResumeSessionMutation,
   useAbandonSessionMutation,
 } from "../../../../lib/store/api/examsApi";
+import { getImageUrl } from "../../../../lib/utils/imageUtils";
 import {
   Card,
   CardContent,
@@ -613,11 +614,22 @@ export default function ExamSessionPage() {
                 </CardDescription>
                 {question.question_detail.question_image && (
                   <div className="mt-4 pl-11">
-                    <img
-                      src={question.question_detail.question_image}
-                      alt="Question"
-                      className="max-w-full h-auto rounded-lg border"
-                    />
+                    <div className="flex justify-center">
+                      <img
+                        src={getImageUrl(
+                          question.question_detail.question_image
+                        )}
+                        alt="Question"
+                        className="max-w-full h-auto rounded-lg border shadow-sm"
+                        onError={(e) => {
+                          console.error(
+                            "Failed to load question image:",
+                            question.question_detail.question_image
+                          );
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
               </CardHeader>
@@ -663,15 +675,24 @@ export default function ExamSessionPage() {
                         )}
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm leading-relaxed">
+                        <p className="text-sm leading-relaxed mb-2">
                           {option.option_text}
                         </p>
                         {option.option_image && (
-                          <img
-                            src={option.option_image}
-                            alt={`Option ${String.fromCharCode(65 + index)}`}
-                            className="mt-2 max-w-xs h-auto rounded border"
-                          />
+                          <div className="mt-2">
+                            <img
+                              src={getImageUrl(option.option_image)}
+                              alt={`Option ${String.fromCharCode(65 + index)}`}
+                              className="max-w-xs h-auto rounded border"
+                              onError={(e) => {
+                                console.error(
+                                  "Failed to load option image:",
+                                  option.option_image
+                                );
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
+                          </div>
                         )}
                       </div>
                     </div>

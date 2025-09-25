@@ -136,7 +136,7 @@ export default function ChapterQuestionsPage() {
         </div>
         {canManage && (
           <Button asChild>
-            <Link href={`/chapters/${id}/questions/create`}>
+            <Link href={`/chapters/${id}/questions/create`} className="flex items-center">
               <Plus className="h-4 w-4 mr-2" />
               Add Question
             </Link>
@@ -345,7 +345,10 @@ export default function ChapterQuestionsPage() {
             </p>
             {canManage && !search && difficulty === "all" && (
               <Button asChild>
-                <Link href={`/chapters/${id}/questions/create`}>
+                <Link
+                  href={`/chapters/${id}/questions/create`}
+                  className="flex items-center"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Add First Question
                 </Link>

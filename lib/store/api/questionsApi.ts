@@ -1,4 +1,4 @@
-// lib/store/api/questionsApi.ts (FINAL FIX - CORRECT ENDPOINTS)
+// lib/store/api/questionsApi.ts (UPDATED WITH IMAGE SUPPORT)
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { RootState } from '../index';
 
@@ -42,7 +42,6 @@ export interface Question {
   chapter_detail?: any;
 }
 
-// Based on your Postman response
 export interface ChapterQuestionsResponse {
   success: boolean;
   chapter: any;
@@ -76,7 +75,7 @@ const baseQuery = fetchBaseQuery({
     if (token) {
       headers.set('authorization', `Bearer ${token}`);
     }
-    headers.set('Content-Type', 'application/json');
+    // Don't set Content-Type for FormData - let the browser set it
     return headers;
   },
 });
@@ -86,13 +85,11 @@ export const questionsApi = createApi({
   baseQuery,
   tagTypes: ['Question', 'QuestionTag', 'Chapter', 'Subject'],
   endpoints: (builder) => ({
-    // FIXED: Get questions for a specific chapter (uses subjects API endpoint)
     getChapterQuestions: builder.query<ChapterQuestionsResponse, string>({
       query: (chapterId) => `subjects/chapters/${chapterId}/questions/`,
       providesTags: ['Question'],
     }),
 
-    // Get all questions with filters (uses questions API endpoint)
     getQuestions: builder.query<QuestionsResponse, { 
       chapter?: string; 
       subject?: string;
@@ -136,21 +133,71 @@ export const questionsApi = createApi({
       providesTags: ['Question'],
     }),
 
+    // UPDATED: Create question with image support
     createQuestion: builder.mutation<Question, QuestionCreateData>({
-      query: (question) => ({
-        url: 'questions/questions/',
-        method: 'POST',
-        body: question,
-      }),
+      query: (question) => {
+        // Create FormData for file uploads
+        const formData = new FormData();
+        
+        // Add basic fields
+        formData.append('chapter', question.chapter);
+        formData.append('question_text', question.question_text);
+        formData.append('difficulty', question.difficulty);
+        formData.append('marks', question.marks.toString());
+        formData.append('negative_marks', question.negative_marks.toString());
+        formData.append('allow_negative_marking', question.allow_negative_marking.toString());
+        
+        if (question.explanation) {
+          formData.append('explanation', question.explanation);
+        }
+        
+        if (question.question_image) {
+          formData.append('question_image', question.question_image);
+        }
+        
+        // Add options as JSON string
+        formData.append('options', JSON.stringify(question.options));
+        
+        // Add tags as JSON string
+        if (question.tags && question.tags.length > 0) {
+          formData.append('tags', JSON.stringify(question.tags));
+        }
+
+        return {
+          url: 'questions/questions/',
+          method: 'POST',
+          body: formData,
+        };
+      },
       invalidatesTags: ['Question', 'Chapter', 'Subject'],
     }),
 
     updateQuestion: builder.mutation<Question, { id: string; data: Partial<QuestionCreateData> }>({
-      query: ({ id, data }) => ({
-        url: `questions/questions/${id}/`,
-        method: 'PATCH',
-        body: data,
-      }),
+      query: ({ id, data }) => {
+        // Create FormData for file uploads
+        const formData = new FormData();
+        
+        // Add fields that are provided
+        Object.entries(data).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            if (key === 'question_image' && value instanceof File) {
+              formData.append(key, value);
+            } else if (key === 'options') {
+              formData.append(key, JSON.stringify(value));
+            } else if (key === 'tags') {
+              formData.append(key, JSON.stringify(value));
+            } else {
+              formData.append(key, value.toString());
+            }
+          }
+        });
+
+        return {
+          url: `questions/questions/${id}/`,
+          method: 'PATCH',
+          body: formData,
+        };
+      },
       invalidatesTags: (result, error, { id }) => [{ type: 'Question', id }],
     }),
 
