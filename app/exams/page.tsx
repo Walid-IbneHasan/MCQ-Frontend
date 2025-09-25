@@ -239,7 +239,7 @@ export default function ExamsPage() {
         </div>
         {canManage && (
           <Button asChild>
-            <Link href="/exams/create">
+            <Link href="/exams/create" className="flex items-center">
               <Plus className="h-4 w-4 mr-2" />
               Create Exam
             </Link>

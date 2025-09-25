@@ -62,7 +62,7 @@ export default function SubjectDetailPage() {
           <CardContent className="p-6 text-center">
             <p className="text-destructive">Failed to load subject details.</p>
             <Button asChild className="mt-4">
-              <Link href="/subjects">
+              <Link href="/subjects" className="flex items-center">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Subjects
               </Link>
@@ -79,7 +79,7 @@ export default function SubjectDetailPage() {
     <div className="container mx-auto p-6 space-y-6">
       {/* Back Button */}
       <Button variant="ghost" asChild>
-        <Link href="/subjects">
+        <Link href="/subjects" className="flex items-center">
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Subjects
         </Link>
@@ -112,7 +112,10 @@ export default function SubjectDetailPage() {
                 </div>
                 {canManage && (
                   <Button asChild>
-                    <Link href={`/subjects/${subject.id}/chapters/create`}>
+                    <Link
+                      href={`/subjects/${subject.id}/chapters/create`}
+                      className="flex items-center"
+                    >
                       <Plus className="h-4 w-4 mr-2" />
                       Add Chapter
                     </Link>

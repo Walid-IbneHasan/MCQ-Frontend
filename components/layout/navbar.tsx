@@ -76,8 +76,8 @@ export function Navbar() {
       )
     ) {
       items.push(
-        { href: "/admin/questions", label: "Questions", icon: BookOpen },
-        { href: "/admin/users", label: "Users", icon: User }
+        { href: "/questions", label: "Questions", icon: BookOpen },
+        { href: "/users", label: "Users", icon: User }
       );
     }
     return items;
@@ -90,7 +90,7 @@ export function Navbar() {
         className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
         aria-label="Main"
       >
-        <div className="mx-auto flex h-14 max-w-[1400px] items-center px-4 sm:px-6 lg:px-8">
+        <div className="container mx-auto flex h-14 items-center px-6">
           <div className="mr-4 flex">
             <Link href="/" className="mr-6 flex items-center gap-2">
               <BookOpen className="h-6 w-6" aria-hidden="true" />
@@ -117,7 +117,7 @@ export function Navbar() {
       className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
       aria-label="Main"
     >
-      <div className="mx-auto flex h-14 max-w-[1400px] items-center px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto flex h-14 items-center px-6">
         {/* Brand */}
         <div className="mr-4 flex">
           <Link
@@ -258,7 +258,7 @@ export function Navbar() {
           isMobileMenuOpen ? "max-h-[80vh] opacity-100" : "max-h-0 opacity-0",
         ].join(" ")}
       >
-        <div className="px-4 sm:px-6 lg:px-8 py-4 space-y-3">
+        <div className="container mx-auto px-6 py-4 space-y-3">
           {/* Clickable User row */}
           <Link
             href={ROUTES.PROFILE}

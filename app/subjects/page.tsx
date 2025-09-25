@@ -60,7 +60,7 @@ export default function SubjectsPage() {
         </div>
         {canManage && (
           <Button asChild>
-            <Link href="/subjects/create">
+            <Link href="/subjects/create" className="flex items-center">
               <Plus className="h-4 w-4 mr-2" />
               Add Subject
             </Link>
