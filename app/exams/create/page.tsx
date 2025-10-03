@@ -1,7 +1,7 @@
-// app/exams/create/page.tsx - Enhanced version with question selection
+// app/exams/create/page.tsx - FIXED VERSION
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../../hooks/use-auth";
 import { ExamCreationForm } from "../../../components/exams/ExamCreationForm";
@@ -12,9 +12,30 @@ import Link from "next/link";
 import { USER_ROLES } from "../../../lib/utils/constants";
 
 export default function CreateExamPage() {
-  const { user, requireAuth } = useAuth();
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
 
-  if (!requireAuth()) {
+  // Handle auth check in useEffect instead of during render
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, isLoading, router]);
+
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-muted rounded w-1/3" />
+          <div className="h-96 bg-muted rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not authenticated
+  if (!user) {
     return null;
   }
 

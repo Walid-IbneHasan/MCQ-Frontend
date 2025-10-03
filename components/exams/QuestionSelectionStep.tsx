@@ -1,4 +1,4 @@
-// components/exams/QuestionSelectionStep.tsx
+// components/exams/QuestionSelectionStep.tsx (COMPLETE FIXED VERSION)
 "use client";
 
 import React from "react";
@@ -26,6 +26,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { useGetChapterQuestionsMutation } from "../../lib/store/api/examsApi";
+import { QuestionSetSelector } from "./QuestionSetSelector";
 import type { Chapter } from "../../types/subjects";
 
 interface Question {
@@ -34,6 +35,7 @@ interface Question {
   difficulty: "easy" | "medium" | "hard";
   marks: number;
   chapter_name: string;
+  subject_name: string;
   options: Array<{
     id: string;
     option_text: string;
@@ -69,6 +71,8 @@ interface QuestionSelectionStepProps {
   onRandomQuestionsCountChange: (count: number) => void;
   chaptersCatalog: Chapter[];
   chapterLabel?: (id: string) => string;
+  useQuestionSet?: string | null;
+  onUseQuestionSetChange?: (setId: string | null) => void;
 }
 
 export function QuestionSelectionStep({
@@ -83,6 +87,8 @@ export function QuestionSelectionStep({
   onRandomQuestionsCountChange,
   chaptersCatalog,
   chapterLabel,
+  useQuestionSet,
+  onUseQuestionSetChange,
 }: QuestionSelectionStepProps) {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [selectedChapter, setSelectedChapter] = React.useState<string>("all");
@@ -99,10 +105,11 @@ export function QuestionSelectionStep({
     }
   }, [selectedChapters, getChapterQuestions]);
 
+  // FIXED: Safe data extraction with proper defaults
   const chaptersQuestions: Record<
     string,
     { count: number; questions: Question[]; chapter_name?: string }
-  > = chaptersQuestionsResponse?.chapters_questions || {};
+  > = chaptersQuestionsResponse?.chapters_questions ?? {};
 
   const handleQuestionToggle = (questionId: string) => {
     const isSelected = selectedQuestions.includes(questionId);
@@ -163,22 +170,38 @@ export function QuestionSelectionStep({
     onNewQuestionsChange(updated);
   };
 
+  const handleQuestionSetSelect = (setId: string | null) => {
+    if (onUseQuestionSetChange) {
+      onUseQuestionSetChange(setId);
+    }
+  };
+
+  const handleQuestionsLoadedFromSet = (questions: string[]) => {
+    onSelectedQuestionsChange(questions);
+  };
+
+  // FIXED: Improved filtering with proper null checks
   const filteredQuestions = React.useMemo(() => {
     let allQuestions: Question[] = [];
 
-    Object.entries(chaptersQuestions).forEach(([chapterId, data]) => {
-      if (selectedChapter === "all" || selectedChapter === chapterId) {
-        allQuestions = [...allQuestions, ...(data.questions || [])];
-      }
-    });
+    // Safely extract all questions from chaptersQuestions
+    if (chaptersQuestions && typeof chaptersQuestions === "object") {
+      Object.entries(chaptersQuestions).forEach(([chapterId, data]) => {
+        if (data && Array.isArray(data.questions)) {
+          if (selectedChapter === "all" || selectedChapter === chapterId) {
+            allQuestions = [...allQuestions, ...data.questions];
+          }
+        }
+      });
+    }
 
+    // Apply filters
     return allQuestions.filter((question) => {
       const matchesSearch = question.question_text
-        .toLowerCase()
+        ?.toLowerCase()
         .includes(searchTerm.toLowerCase());
       const matchesDifficulty =
-        difficultyFilter === "all" ||
-        question.difficulty === (difficultyFilter as any);
+        difficultyFilter === "all" || question.difficulty === difficultyFilter;
       return matchesSearch && matchesDifficulty;
     });
   }, [chaptersQuestions, selectedChapter, searchTerm, difficultyFilter]);
@@ -267,13 +290,22 @@ export function QuestionSelectionStep({
                     onRandomQuestionsCountChange(parseInt(e.target.value) || 0)
                   }
                   min="0"
-                  max={totalQuestions - manualIncludedCount}
+                  max={Math.max(0, totalQuestions - manualIncludedCount)}
                   className="w-32 mt-1"
                 />
               </div>
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Question Set Selector */}
+      {onUseQuestionSetChange && (
+        <QuestionSetSelector
+          selectedSetId={useQuestionSet || null}
+          onSelectSet={handleQuestionSetSelect}
+          onQuestionsLoaded={handleQuestionsLoadedFromSet}
+        />
       )}
 
       <Tabs defaultValue="existing" className="w-full">
@@ -311,13 +343,19 @@ export function QuestionSelectionStep({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Chapters</SelectItem>
-                      {Object.entries(chaptersQuestions).map(
-                        ([chapterId, data]) => (
-                          <SelectItem key={chapterId} value={chapterId}>
-                            {data.chapter_name ? data.chapter_name : "Chapter"}{" "}
-                            ({data.count} questions)
-                          </SelectItem>
+                      {Object.keys(chaptersQuestions).length > 0 ? (
+                        Object.entries(chaptersQuestions).map(
+                          ([chapterId, data]) => (
+                            <SelectItem key={chapterId} value={chapterId}>
+                              {data?.chapter_name ?? "Chapter"} (
+                              {data?.count ?? 0} questions)
+                            </SelectItem>
+                          )
                         )
+                      ) : (
+                        <SelectItem value="none" disabled>
+                          No chapters loaded
+                        </SelectItem>
                       )}
                     </SelectContent>
                   </Select>
@@ -360,7 +398,7 @@ export function QuestionSelectionStep({
                 <p className="text-destructive">Failed to load questions</p>
               </CardContent>
             </Card>
-          ) : (
+          ) : filteredQuestions.length > 0 ? (
             <div className="space-y-3">
               {filteredQuestions.map((question) => (
                 <Card
@@ -395,7 +433,7 @@ export function QuestionSelectionStep({
                         </p>
 
                         <div className="text-xs text-muted-foreground">
-                          {question.options.length} options
+                          {question.options?.length ?? 0} options
                         </div>
                       </div>
 
@@ -406,17 +444,17 @@ export function QuestionSelectionStep({
                   </CardContent>
                 </Card>
               ))}
-
-              {filteredQuestions.length === 0 && (
-                <Card>
-                  <CardContent className="p-6 text-center">
-                    <p className="text-muted-foreground">
-                      No questions found matching your criteria
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
             </div>
+          ) : (
+            <Card>
+              <CardContent className="p-6 text-center">
+                <p className="text-muted-foreground">
+                  {Object.keys(chaptersQuestions).length === 0
+                    ? "Loading questions from selected chapters..."
+                    : "No questions found matching your criteria"}
+                </p>
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 

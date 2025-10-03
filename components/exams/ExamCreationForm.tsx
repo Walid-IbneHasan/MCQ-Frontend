@@ -1,8 +1,9 @@
-// components/exams/ExamCreationForm.tsx (FIXED TO USE FORMDATA)
+// components/exams/ExamCreationForm.tsx (COMPLETE VERSION)
 "use client";
 
 import React, { useState } from "react";
 import { useCreateExamMutation } from "../../lib/store/api/examsApi";
+import { useIncrementQuestionSetUsageMutation } from "../../lib/store/api/questionSetsApi";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
@@ -35,12 +36,13 @@ interface NewQuestion {
     is_correct: boolean;
     option_order: number;
   }>;
-  chapter?: string; // NEW: assign to a chapter
-  include_in_exam?: boolean; // NEW: include in this exam
+  chapter?: string;
+  include_in_exam?: boolean;
 }
 
 export function ExamCreationForm() {
   const [createExam, { isLoading }] = useCreateExamMutation();
+  const [incrementUsage] = useIncrementQuestionSetUsageMutation();
   const { toast } = useToast();
   const accessToken = useSelector((state: RootState) => state.auth.accessToken);
 
@@ -53,7 +55,7 @@ export function ExamCreationForm() {
 
   // Chapters
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
-  const [chaptersCatalog, setChaptersCatalog] = useState<Chapter[]>([]); // NEW
+  const [chaptersCatalog, setChaptersCatalog] = useState<Chapter[]>([]);
 
   // Question selection
   const [questionSelectionMethod, setQuestionSelectionMethod] = useState<
@@ -62,6 +64,11 @@ export function ExamCreationForm() {
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([]);
   const [newQuestions, setNewQuestions] = useState<NewQuestion[]>([]);
   const [randomQuestionsCount, setRandomQuestionsCount] = useState(0);
+
+  // NEW: Question Set options
+  const [useQuestionSet, setUseQuestionSet] = useState<string | null>(null);
+  const [createQuestionSetOption, setCreateQuestionSetOption] = useState(false);
+  const [questionSetName, setQuestionSetName] = useState("");
 
   // Exam configuration
   const [totalQuestions, setTotalQuestions] = useState(50);
@@ -101,7 +108,6 @@ export function ExamCreationForm() {
       return false;
     }
 
-    // count only those new questions that are marked to include
     const manualIncluded = selectedQuestions.length + includeNewCount();
 
     if (questionSelectionMethod === "manual") {
@@ -166,28 +172,22 @@ export function ExamCreationForm() {
     return true;
   };
 
-  /**
-   * Create new questions using FormData (like the regular question creation)
-   */
   const createNewQuestionsIfAny = async (): Promise<string[]> => {
     if (!accessToken || newQuestions.length === 0) return [];
 
     const createdIds: string[] = [];
 
     for (const q of newQuestions) {
-      // Create FormData for the question (consistent with regular question creation)
       const formData = new FormData();
 
-      // Add basic fields
       formData.append("chapter", q.chapter!);
       formData.append("question_text", q.question_text);
       formData.append("difficulty", q.difficulty);
       formData.append("marks", q.marks.toString());
       formData.append("negative_marks", q.negative_marks.toString());
       formData.append("allow_negative_marking", "true");
-      formData.append("explanation", ""); // Empty explanation for now
+      formData.append("explanation", "");
 
-      // Add options as JSON string (consistent with existing question creation)
       formData.append(
         "options",
         JSON.stringify(
@@ -199,7 +199,6 @@ export function ExamCreationForm() {
         )
       );
 
-      // Add empty tags as JSON string
       formData.append("tags", JSON.stringify([]));
 
       const res = await fetch(
@@ -208,7 +207,6 @@ export function ExamCreationForm() {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            // Don't set Content-Type for FormData - let browser set it
           },
           body: formData,
         }
@@ -248,7 +246,7 @@ export function ExamCreationForm() {
       // 3) Final selected IDs
       const questionIds = [...selectedQuestions, ...includeNewIds];
 
-      // 4) Build exam payload (this can stay as JSON since it's not creating individual questions)
+      // 4) Build exam payload
       const examData: any = {
         title,
         description,
@@ -267,25 +265,40 @@ export function ExamCreationForm() {
         max_attempts: maxAttempts,
         randomize_questions: randomizeQuestions,
         random_questions_count: randomQuestionsCount,
-        // IMPORTANT: send selected question IDs
         selected_questions: questionIds,
-        selected_question_ids: questionIds,
-        questions: questionIds,
+
+        // NEW: Question set fields
+        create_question_set: createQuestionSetOption,
+        question_set_name: questionSetName,
+        use_question_set: useQuestionSet,
+
         ...(examType === "scheduled" && {
           scheduled_start: scheduledStart,
           scheduled_end: scheduledEnd,
         }),
       };
 
+      // 5) Create exam
       await createExam(examData).unwrap();
+
+      // 6) If using existing question set, increment usage
+      if (useQuestionSet) {
+        try {
+          await incrementUsage(useQuestionSet).unwrap();
+        } catch (error) {
+          console.error("Failed to increment usage:", error);
+          // Don't fail the exam creation
+        }
+      }
 
       toast({
         title: "Success",
-        description: "Exam created successfully!",
+        description: createQuestionSetOption
+          ? "Exam and question set created successfully!"
+          : "Exam created successfully!",
         variant: "default",
       });
 
-      // Redirect to exams page
       window.location.href = "/exams";
     } catch (error: any) {
       console.error("Exam creation error:", error);
@@ -409,12 +422,12 @@ export function ExamCreationForm() {
           <ChapterSelector
             selectedChapters={selectedChapters}
             onSelectedChaptersChange={setSelectedChapters}
-            onAvailableChaptersChange={setChaptersCatalog} // NEW
+            onAvailableChaptersChange={setChaptersCatalog}
           />
         </CardContent>
       </Card>
 
-      {/* Question Selection */}
+      {/* Question Selection with Question Set Support */}
       {selectedChapters.length > 0 && (
         <Card>
           <CardHeader>
@@ -433,10 +446,61 @@ export function ExamCreationForm() {
               onRandomQuestionsCountChange={setRandomQuestionsCount}
               chaptersCatalog={chaptersCatalog}
               chapterLabel={chapterLabel}
+              useQuestionSet={useQuestionSet}
+              onUseQuestionSetChange={setUseQuestionSet}
             />
           </CardContent>
         </Card>
       )}
+
+      {/* NEW: Question Set Creation Options */}
+      {selectedChapters.length > 0 &&
+        questionSelectionMethod !== "random" &&
+        (selectedQuestions.length > 0 || newQuestions.length > 0) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Save as Question Set</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Save these questions as a reusable question set for future exams
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="createQuestionSet"
+                  checked={createQuestionSetOption}
+                  onCheckedChange={(checked) => {
+                    setCreateQuestionSetOption(!!checked);
+                    if (!checked) {
+                      setQuestionSetName("");
+                    }
+                  }}
+                />
+                <Label htmlFor="createQuestionSet" className="cursor-pointer">
+                  Create a question set from this exam's questions
+                </Label>
+              </div>
+
+              {createQuestionSetOption && (
+                <div className="pl-6 space-y-2">
+                  <Label htmlFor="questionSetName">
+                    Question Set Name (Optional)
+                  </Label>
+                  <Input
+                    id="questionSetName"
+                    value={questionSetName}
+                    onChange={(e) => setQuestionSetName(e.target.value)}
+                    placeholder="e.g., Advanced Math - Calculus Questions"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    If empty, a default name will be generated based on the exam
+                    title
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
       {/* Exam Configuration */}
       <Card>

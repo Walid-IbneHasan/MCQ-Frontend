@@ -7,6 +7,7 @@ import { examsApi } from './api/examsApi';
 import { resultsApi } from './api/resultsApi';
 import { examAnalyticsApi } from './api/examAnalyticsApi';
 import { leaderboardsApi } from './api/leaderboardsApi';
+import { questionSetsApi } from './api/questionSetsApi';
 import authReducer from './slices/authSlice';
 import themeReducer from './slices/themeSlice';
 
@@ -21,6 +22,7 @@ export const store = configureStore({
     [examAnalyticsApi.reducerPath]: examAnalyticsApi.reducer,
     [resultsApi.reducerPath]: resultsApi.reducer,
     [leaderboardsApi.reducerPath]: leaderboardsApi.reducer,
+    [questionSetsApi.reducerPath]: questionSetsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -35,7 +37,7 @@ export const store = configureStore({
       examAnalyticsApi.middleware,
       resultsApi.middleware,
       leaderboardsApi.middleware,
-
+      questionSetsApi.middleware,
     ),
 });
 
