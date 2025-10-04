@@ -1,8 +1,8 @@
-// app/question-sets/page.tsx (NEW FILE)
-
+// app/question-sets/page.tsx (FIXED VERSION)
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "../../hooks/use-auth";
 import {
   useGetQuestionSetsQuery,
@@ -21,11 +21,32 @@ import Link from "next/link";
 import { USER_ROLES } from "../../lib/utils/constants";
 
 export default function QuestionSetsPage() {
-  const { user, requireAuth } = useAuth();
-  const { data, isLoading } = useGetQuestionSetsQuery({});
+  const { user, isLoading: isLoadingAuth } = useAuth();
+  const router = useRouter();
+  const { data, isLoading: isLoadingData } = useGetQuestionSetsQuery({});
   const [deleteQuestionSet] = useDeleteQuestionSetMutation();
 
-  if (!requireAuth()) {
+  // Handle auth check in useEffect instead of during render
+  useEffect(() => {
+    if (!isLoadingAuth && !user) {
+      router.push("/login");
+    }
+  }, [user, isLoadingAuth, router]);
+
+  // Show loading state while checking auth
+  if (isLoadingAuth) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-muted rounded w-1/3" />
+          <div className="h-96 bg-muted rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not authenticated
+  if (!user) {
     return null;
   }
 
@@ -59,6 +80,10 @@ export default function QuestionSetsPage() {
     }
   };
 
+  // Extract question sets from paginated response structure
+  const questionSets =
+    data?.results?.question_sets || data?.question_sets || [];
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -68,20 +93,24 @@ export default function QuestionSetsPage() {
             Manage your reusable question sets
           </p>
         </div>
-        <Button asChild>
-          <Link href="/exams/create">Create New Exam</Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href="/exams/create">Create Exam</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/question-sets/create">Create Question Set</Link>
+          </Button>
+        </div>
       </div>
-
-      {isLoading ? (
+      {isLoadingData ? (
         <div className="space-y-4">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="h-32 bg-muted animate-pulse rounded-lg" />
           ))}
         </div>
-      ) : data && data.question_sets.length > 0 ? (
+      ) : questionSets.length > 0 ? (
         <div className="grid gap-4">
-          {data.question_sets.map((set) => (
+          {questionSets.map((set: any) => (
             <Card key={set.id}>
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
@@ -120,7 +149,10 @@ export default function QuestionSetsPage() {
 
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" asChild>
-                      <Link href={`/question-sets/${set.id}`}>
+                      <Link
+                        href={`/question-sets/${set.id}`}
+                        className="flex items-center "
+                      >
                         <Eye className="h-4 w-4 mr-2" />
                         View
                       </Link>

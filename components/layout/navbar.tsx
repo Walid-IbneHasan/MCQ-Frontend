@@ -77,7 +77,8 @@ export function Navbar() {
     ) {
       items.push(
         { href: "/questions", label: "Questions", icon: BookOpen },
-        { href: "/users", label: "Users", icon: User }
+        { href: "/users", label: "Users", icon: User },
+        { href: "/question-sets", label: "Question Sets", icon: BookOpen }
       );
     }
     return items;
