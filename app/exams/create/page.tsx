@@ -69,7 +69,7 @@ export default function CreateExamPage() {
     <div className="container mx-auto p-6 space-y-6">
       {/* Back Button */}
       <Button variant="ghost" asChild>
-        <Link href="/exams">
+        <Link href="/exams" className="flex items-center">
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Exams
         </Link>
