@@ -1,4 +1,4 @@
-// app/exams/session/[sessionId]/page.tsx (FIXED WITH IMAGE SUPPORT)
+// app/exams/session/[sessionId]/page.tsx (FIXED - Hooks order)
 "use client";
 
 import React from "react";
@@ -19,7 +19,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "../../../../components/ui/card";
 import { Button } from "../../../../components/ui/button";
 import { Badge } from "../../../../components/ui/badge";
@@ -49,10 +48,10 @@ import { useToastContext } from "../../../../lib/providers/toast-provider";
 export default function ExamSessionPage() {
   const { sessionId } = useParams();
   const router = useRouter();
-  const { user, requireAuth } = useAuth();
+  const { user } = useAuth(); // Remove requireAuth() call here
   const { toast } = useToastContext();
 
-  // State management
+  // State management - ALL hooks must be called BEFORE any conditional returns
   const [selectedAnswers, setSelectedAnswers] = React.useState<
     Record<string, string>
   >({});
@@ -66,24 +65,34 @@ export default function ExamSessionPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [lastSaved, setLastSaved] = React.useState<Date | null>(null);
 
-  if (!requireAuth()) {
-    return null;
-  }
-
-  // API hooks
+  // API hooks - ALL must be called before conditional returns
   const { data: questionsResponse, isLoading: isLoadingQuestions } =
-    useGetSessionQuestionsQuery(sessionId as string);
+    useGetSessionQuestionsQuery(sessionId as string, {
+      skip: !user, // Skip query if no user
+    });
 
   const { data: timerResponse } = useGetSessionTimerQuery(sessionId as string, {
-    pollingInterval: 1000, // Poll every second for timer
+    pollingInterval: 1000,
+    skip: !user, // Skip query if no user
   });
 
-  // ---------------------
-  // FIX: move data extraction ABOVE any effects that use `timer`
-  // ---------------------
+  // Mutations
+  const [bulkSubmitAnswers] = useBulkSubmitAnswersMutation();
+  const [submitExam, { isLoading: isSubmitting }] = useSubmitExamMutation();
+  const [pauseSession] = usePauseSessionMutation();
+  const [resumeSession] = useResumeSessionMutation();
+  const [abandonSession] = useAbandonSessionMutation();
+
+  // Extract data
   const questions = questionsResponse?.questions || [];
   const timer = timerResponse?.timer;
   const examType = questionsResponse?.exam_type || "self_paced";
+
+  // Calculate progress
+  const answeredCount = Object.keys(selectedAnswers).length;
+  const totalQuestions = questions.length;
+  const progressPercentage =
+    totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
 
   // Store questions data in localStorage when questions are loaded
   React.useEffect(() => {
@@ -100,10 +109,6 @@ export default function ExamSessionPage() {
 
       try {
         localStorage.setItem(storageKey, JSON.stringify(dataToStore));
-        console.log(
-          "Stored questions data in localStorage for session:",
-          sessionId
-        );
       } catch (error) {
         console.warn("Failed to store questions data in localStorage:", error);
       }
@@ -113,30 +118,14 @@ export default function ExamSessionPage() {
   // Clean up localStorage when component unmounts or session ends
   React.useEffect(() => {
     return () => {
-      // Only clean up if session is completed (not if user just navigates away during exam)
       if (timer?.status === "completed" || timer?.status === "auto_submitted") {
         const storageKey = `exam_questions_${sessionId}`;
-        // Don't remove immediately, keep it for results page
         setTimeout(() => {
           localStorage.removeItem(storageKey);
-          console.log("Cleaned up stored questions data from localStorage");
-        }, 5 * 60 * 1000); // Remove after 5 minutes
+        }, 5 * 60 * 1000);
       }
     };
   }, [sessionId, timer?.status]);
-
-  // Mutations
-  const [bulkSubmitAnswers] = useBulkSubmitAnswersMutation();
-  const [submitExam, { isLoading: isSubmitting }] = useSubmitExamMutation();
-  const [pauseSession] = usePauseSessionMutation();
-  const [resumeSession] = useResumeSessionMutation();
-  const [abandonSession] = useAbandonSessionMutation();
-
-  // Calculate progress
-  const answeredCount = Object.keys(selectedAnswers).length;
-  const totalQuestions = questions.length;
-  const progressPercentage =
-    totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
 
   // Auto-submit when time is up
   React.useEffect(() => {
@@ -148,6 +137,7 @@ export default function ExamSessionPage() {
       setAutoSubmitTriggered(true);
       handleAutoSubmit();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer?.is_time_up, timer?.status, autoSubmitTriggered]);
 
   // Initialize question start times
@@ -180,25 +170,29 @@ export default function ExamSessionPage() {
 
     const saveInterval = setInterval(() => {
       if (timer?.status === "in_progress") {
-        saveAllAnswers(false); // Auto-save without showing toast
+        saveAllAnswers(false);
       }
-    }, 30000); // Save every 30 seconds
+    }, 30000);
 
     return () => clearInterval(saveInterval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAnswers, timer?.status]);
+
+  // Auth check effect - redirect if not authenticated
+  React.useEffect(() => {
+    if (!user) {
+      router.push("/login");
+    }
+  }, [user, router]);
 
   // Handler functions
   const handleAnswerSelect = (questionId: string, optionId: string) => {
-    // Calculate time spent on this question
     const timeSpentOnQuestion = Math.floor(
       (Date.now() - (questionStartTimes[questionId] || Date.now())) / 1000
     );
 
-    // Update local state immediately for better UX
     setSelectedAnswers((prev) => ({ ...prev, [questionId]: optionId }));
     setTimeSpent((prev) => ({ ...prev, [questionId]: timeSpentOnQuestion }));
-
-    // Update start time for this question for future calculations
     setQuestionStartTimes((prev) => ({ ...prev, [questionId]: Date.now() }));
   };
 
@@ -249,10 +243,7 @@ export default function ExamSessionPage() {
 
   const handleAutoSubmit = async () => {
     try {
-      // First save all current answers
       await saveAllAnswers(false);
-
-      // Then submit the exam
       await submitExam({
         sessionId: sessionId as string,
       }).unwrap();
@@ -264,7 +255,6 @@ export default function ExamSessionPage() {
         variant: "destructive",
       });
 
-      // Navigate to results page
       router.push(`/exams/session/${sessionId}/results`);
     } catch (error: any) {
       console.error("Auto-submit failed:", error);
@@ -279,7 +269,6 @@ export default function ExamSessionPage() {
 
   const handleSubmitExam = async () => {
     try {
-      // First save all current answers
       const saveResponse = await saveAllAnswers(false);
 
       if (saveResponse) {
@@ -290,7 +279,6 @@ export default function ExamSessionPage() {
         });
       }
 
-      // Then submit the exam
       await submitExam({
         sessionId: sessionId as string,
       }).unwrap();
@@ -301,7 +289,6 @@ export default function ExamSessionPage() {
         variant: "success",
       });
 
-      // Navigate to results page
       router.push(`/exams/session/${sessionId}/results`);
     } catch (error: any) {
       console.error("Submit failed:", error);
@@ -314,14 +301,11 @@ export default function ExamSessionPage() {
   };
 
   const handlePauseResume = async () => {
-    // Only allow pause/resume for self_paced and practice exams
     if (examType === "scheduled") return;
 
     try {
       if (timer?.status === "in_progress") {
-        // Save answers before pausing
         await saveAllAnswers(false);
-
         await pauseSession(sessionId as string);
         toast({
           title: "Exam Paused",
@@ -367,7 +351,6 @@ export default function ExamSessionPage() {
     await saveAllAnswers(true);
   };
 
-  // Utility functions
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -380,6 +363,18 @@ export default function ExamSessionPage() {
     }
     return `${minutes}:${secs.toString().padStart(2, "0")}`;
   };
+
+  // NOW check authentication AFTER all hooks
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <RotateCcw className="h-8 w-8 animate-spin mx-auto" />
+          <p>Redirecting to login...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Loading state
   if (isLoadingQuestions || questions.length === 0) {
@@ -433,7 +428,6 @@ export default function ExamSessionPage() {
       <div className="border-b bg-card sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            {/* Exam Info */}
             <div className="flex items-center gap-4">
               <div>
                 <h1 className="text-lg font-semibold">Exam Session</h1>
@@ -443,9 +437,7 @@ export default function ExamSessionPage() {
               </div>
             </div>
 
-            {/* Timer & Controls */}
             <div className="flex items-center gap-4">
-              {/* Save Status */}
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {isSaving ? (
                   <>
@@ -460,7 +452,6 @@ export default function ExamSessionPage() {
                 ) : null}
               </div>
 
-              {/* Timer Display */}
               <div
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-lg ${
                   timer && timer.time_remaining_seconds < 300
@@ -476,9 +467,7 @@ export default function ExamSessionPage() {
                 </span>
               </div>
 
-              {/* Session Controls */}
               <div className="flex gap-2">
-                {/* Manual Save Button */}
                 <Button
                   variant="outline"
                   size="sm"
@@ -498,7 +487,6 @@ export default function ExamSessionPage() {
                   )}
                 </Button>
 
-                {/* Pause/Resume only for self_paced and practice exams */}
                 {examType !== "scheduled" &&
                   (timer?.status === "in_progress" ? (
                     <Button
@@ -543,7 +531,6 @@ export default function ExamSessionPage() {
             </div>
           </div>
 
-          {/* Progress Bar */}
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">Progress</span>
@@ -567,7 +554,7 @@ export default function ExamSessionPage() {
         </div>
       </div>
 
-      {/* Main Content - All Questions */}
+      {/* Main Content */}
       <div className="container mx-auto px-6 py-6">
         <div className="max-w-4xl mx-auto space-y-8">
           {questions.map((question, questionIndex) => (
@@ -767,31 +754,36 @@ export default function ExamSessionPage() {
         </div>
       </div>
 
-      {/* Submit Confirmation Dialog */}
+      {/* Dialogs */}
       <Dialog open={showSubmitConfirm} onOpenChange={setShowSubmitConfirm}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Submit Exam</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to submit your exam? This action cannot be
-              undone.
-              <div className="mt-3 p-3 bg-muted rounded-lg">
-                <div className="text-sm space-y-1">
-                  <p>
-                    <strong>Questions answered:</strong> {answeredCount} of{" "}
-                    {totalQuestions}
-                  </p>
-                  <p>
-                    <strong>Questions unanswered:</strong>{" "}
-                    {totalQuestions - answeredCount}
-                  </p>
-                  <p>
-                    <strong>Progress:</strong> {progressPercentage.toFixed(1)}%
-                    complete
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Your answers will be saved automatically before submission.
-                  </p>
+            <DialogDescription asChild>
+              <div>
+                <p className="mb-3">
+                  Are you sure you want to submit your exam? This action cannot
+                  be undone.
+                </p>
+                <div className="p-3 bg-muted rounded-lg">
+                  <div className="text-sm space-y-1">
+                    <p>
+                      <strong>Questions answered:</strong> {answeredCount} of{" "}
+                      {totalQuestions}
+                    </p>
+                    <p>
+                      <strong>Questions unanswered:</strong>{" "}
+                      {totalQuestions - answeredCount}
+                    </p>
+                    <p>
+                      <strong>Progress:</strong> {progressPercentage.toFixed(1)}
+                      % complete
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Your answers will be saved automatically before
+                      submission.
+                    </p>
+                  </div>
                 </div>
               </div>
             </DialogDescription>
@@ -823,7 +815,6 @@ export default function ExamSessionPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Abandon Confirmation Dialog */}
       <Dialog open={showAbandonConfirm} onOpenChange={setShowAbandonConfirm}>
         <DialogContent>
           <DialogHeader>

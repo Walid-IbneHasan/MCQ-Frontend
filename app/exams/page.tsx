@@ -1,9 +1,14 @@
-// app/exams/page.tsx
+// app/exams/page.tsx - Complete code using existing endpoint
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "../../hooks/use-auth";
-import { useGetExamsQuery } from "../../lib/store/api/examsApi";
+import {
+  useGetExamsQuery,
+  useGetMyExamsQuery,
+  useGetMySessionsQuery,
+} from "../../lib/store/api/examsApi";
 import {
   Card,
   CardContent,
@@ -31,13 +36,19 @@ import {
   Calendar,
   Filter,
   TrendingUp,
+  History,
+  Award,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 import { USER_ROLES } from "../../lib/utils/constants";
 import type { Exam } from "../../lib/store/api/examsApi";
+import { useToast } from "../../components/ui/use-toast";
 
 export default function ExamsPage() {
   const { user, requireAuth } = useAuth();
+  const router = useRouter();
+  const { toast } = useToast();
   const [search, setSearch] = React.useState("");
   const [examType, setExamType] = React.useState("all");
   const [page, setPage] = React.useState(1);
@@ -56,25 +67,11 @@ export default function ExamsPage() {
     page,
   });
 
-  // DEBUG: Log the response to see its structure
-  React.useEffect(() => {
-    console.log("=== EXAMS DEBUG ===");
-    console.log("Full response:", examsResponse);
-    console.log("Is loading:", isLoadingExams);
-    console.log("Error:", examsError);
+  const { data: myExamsData, isLoading: isLoadingHistory } =
+    useGetMyExamsQuery();
 
-    if (examsResponse) {
-      console.log("Response keys:", Object.keys(examsResponse));
-      console.log("Has results?", "results" in examsResponse);
-      console.log("Has exams directly?", "exams" in examsResponse);
-
-      if ("results" in examsResponse) {
-        console.log("Results:", examsResponse.results);
-        console.log("Results keys:", Object.keys(examsResponse.results));
-      }
-    }
-    console.log("==================");
-  }, [examsResponse, isLoadingExams, examsError]);
+  // Use existing endpoint with empty params to get all sessions
+  const { data: mySessionsData } = useGetMySessionsQuery({});
 
   const canManage =
     user?.role &&
@@ -102,6 +99,53 @@ export default function ExamsPage() {
       return `${hours}h ${mins}m`;
     }
     return `${mins}m`;
+  };
+
+  const getMostRecentSessionId = (examId: string) => {
+    if (!mySessionsData) return null;
+
+    const sessions =
+      mySessionsData?.results?.sessions || mySessionsData?.sessions || [];
+
+    console.log("All sessions:", sessions);
+    console.log("Looking for exam:", examId);
+
+    const examSessions = sessions.filter(
+      (s: any) =>
+        s.exam === examId &&
+        (s.status === "completed" || s.status === "auto_submitted")
+    );
+
+    console.log("Filtered exam sessions:", examSessions);
+
+    if (examSessions.length > 0) {
+      examSessions.sort((a: any, b: any) => {
+        const dateA = new Date(a.submitted_at || a.ended_at || a.created_at);
+        const dateB = new Date(b.submitted_at || b.ended_at || b.created_at);
+        return dateB.getTime() - dateA.getTime();
+      });
+
+      console.log("Found session:", examSessions[0].id, "for exam:", examId);
+      return examSessions[0].id;
+    } else {
+      console.log("No completed sessions found for exam:", examId);
+    }
+
+    return null;
+  };
+
+  const handleViewResults = (examId: string) => {
+    const sessionId = getMostRecentSessionId(examId);
+    if (sessionId) {
+      router.push(`/exams/session/${sessionId}/results`);
+    } else {
+      toast({
+        title: "No Results Found",
+        description:
+          "No completed session found for this exam. The exam might still be in progress.",
+        variant: "destructive",
+      });
+    }
   };
 
   const ExamCard: React.FC<{ exam: Exam }> = ({ exam }) => (
@@ -140,7 +184,6 @@ export default function ExamsPage() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Exam Stats */}
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex items-center gap-2">
             <BookOpen className="h-4 w-4 text-muted-foreground" />
@@ -160,7 +203,6 @@ export default function ExamsPage() {
           </div>
         </div>
 
-        {/* Scheduled Time */}
         {exam.exam_type === "scheduled" && exam.scheduled_start && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Calendar className="h-4 w-4" />
@@ -171,7 +213,6 @@ export default function ExamsPage() {
           </div>
         )}
 
-        {/* Average Score */}
         {exam.average_score > 0 && (
           <div className="flex items-center gap-2 text-sm">
             <TrendingUp className="h-4 w-4 text-green-600" />
@@ -179,23 +220,23 @@ export default function ExamsPage() {
           </div>
         )}
 
-        {/* Action Button */}
         <div className="pt-2">
-          <Button asChild className="w-full" disabled={!exam.can_start_now}>
-            <Link href={`/exams/${exam.id}`}>
-              {exam.can_start_now ? "Start Exam" : "View Details"}
-            </Link>
-          </Button>
+          <Link href={`/exams/${exam.id}`}>
+            <Button
+              asChild
+              className="w-full hover:cursor-pointer"
+              disabled={!exam.can_start_now}
+            >
+              {exam.can_start_now ? "View Details" : "View Details"}
+            </Button>
+          </Link>
         </div>
       </CardContent>
     </Card>
   );
 
-  // Extract exams based on the actual response structure
   const exams = React.useMemo(() => {
     if (!examsResponse) return [];
-
-    // Try different possible structures
     if (examsResponse.results && examsResponse.results.exams) {
       return examsResponse.results.exams;
     }
@@ -205,24 +246,19 @@ export default function ExamsPage() {
     if (Array.isArray(examsResponse)) {
       return examsResponse;
     }
-
     return [];
   }, [examsResponse]);
 
-  // Get pagination info
   const hasNextPage = React.useMemo(() => {
     if (!examsResponse) return false;
-
     if (examsResponse.next) return !!examsResponse.next;
     if (examsResponse.results && examsResponse.results.next) {
       return !!examsResponse.results.next;
     }
-
     return false;
   }, [examsResponse]);
 
-  console.log("Extracted exams:", exams);
-  console.log("Has next page:", hasNextPage);
+  const examHistory = myExamsData?.exam_history || [];
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -238,14 +274,121 @@ export default function ExamsPage() {
           </p>
         </div>
         {canManage && (
-          <Button asChild>
-            <Link href="/exams/create" className="flex items-center">
+          <Link href="/exams/create">
+            <Button asChild className="flex items-center hover:cursor-pointer">
               <Plus className="h-4 w-4 mr-2" />
               Create Exam
-            </Link>
-          </Button>
+            </Button>
+          </Link>
         )}
       </div>
+
+      {/* My Exam History Section - Only for students */}
+      {!canManage && examHistory.length > 0 && (
+        <Card className="border-primary/20">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              <CardTitle>My Exam History</CardTitle>
+            </div>
+            <CardDescription>
+              Your previous exam attempts and performance
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingHistory ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-24 bg-muted animate-pulse rounded"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {examHistory.map((item: any) => (
+                  <Card
+                    key={item.exam.id}
+                    className="hover:border-primary/50 transition-colors"
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold truncate">
+                              {item.exam.title}
+                            </h4>
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${getExamTypeColor(
+                                item.exam.exam_type
+                              )}`}
+                            >
+                              {item.exam.exam_type}
+                            </Badge>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div className="flex items-center gap-2">
+                              <Award className="h-4 w-4 text-yellow-600" />
+                              <span className="font-medium">
+                                Best: {item.best_score}%
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <BarChart3 className="h-4 w-4 text-blue-600" />
+                              <span>
+                                {item.attempts}{" "}
+                                {item.attempts === 1 ? "attempt" : "attempts"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Clock className="h-4 w-4" />
+                              <span>
+                                Last:{" "}
+                                {new Date(
+                                  item.last_attempt
+                                ).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <BookOpen className="h-4 w-4" />
+                              <span>{item.exam.total_questions} questions</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <Badge
+                            className={
+                              item.best_score >= item.exam.passing_percentage
+                                ? "bg-green-100 text-green-800 border-green-200"
+                                : "bg-red-100 text-red-800 border-red-200"
+                            }
+                          >
+                            {item.best_score >= item.exam.passing_percentage
+                              ? "Passed"
+                              : "Failed"}
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => handleViewResults(item.exam.id)}
+                          >
+                            View Results
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card>
@@ -261,81 +404,88 @@ export default function ExamsPage() {
               />
             </div>
             <Select value={examType} onValueChange={setExamType}>
-              <SelectTrigger className="w-full sm:w-48">
+              <SelectTrigger className="w-full sm:w-48 hover:cursor-pointer">
                 <Filter className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="self_paced">Self Paced</SelectItem>
-                <SelectItem value="scheduled">Scheduled</SelectItem>
-                <SelectItem value="practice">Practice</SelectItem>
+                <SelectItem value="all" className="hover:cursor-pointer">
+                  All Types
+                </SelectItem>
+                <SelectItem value="self_paced" className="hover:cursor-pointer">
+                  Self Paced
+                </SelectItem>
+                <SelectItem value="scheduled" className="hover:cursor-pointer">
+                  Scheduled
+                </SelectItem>
+                <SelectItem value="practice" className="hover:cursor-pointer">
+                  Practice
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
         </CardContent>
       </Card>
 
-      {/* Exams Grid */}
-      {isLoadingExams ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-80 bg-muted animate-pulse rounded-lg" />
-          ))}
-        </div>
-      ) : examsError ? (
-        <Card>
-          <CardContent className="p-6 text-center">
-            <p className="text-destructive">
-              Failed to load exams. Please try again.
-            </p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Error: {JSON.stringify(examsError)}
-            </p>
-          </CardContent>
-        </Card>
-      ) : exams && exams.length > 0 ? (
-        <>
+      {/* Available Exams Grid */}
+      <div>
+        <h2 className="text-2xl font-semibold mb-4">Available Exams</h2>
+        {isLoadingExams ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {exams.map((exam: Exam) => (
-              <ExamCard key={exam.id} exam={exam} />
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-80 bg-muted animate-pulse rounded-lg" />
             ))}
           </div>
-
-          {/* Pagination */}
-          {hasNextPage && (
-            <div className="flex justify-center">
-              <Button
-                variant="outline"
-                onClick={() => setPage((prev) => prev + 1)}
-                disabled={isLoadingExams}
-              >
-                Load More
-              </Button>
+        ) : examsError ? (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <p className="text-destructive">
+                Failed to load exams. Please try again.
+              </p>
+            </CardContent>
+          </Card>
+        ) : exams && exams.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {exams.map((exam: Exam) => (
+                <ExamCard key={exam.id} exam={exam} />
+              ))}
             </div>
-          )}
-        </>
-      ) : (
-        <Card>
-          <CardContent className="p-6 text-center">
-            <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-semibold mb-2">No exams found</h3>
-            <p className="text-muted-foreground mb-4">
-              {search || examType !== "all"
-                ? "No exams match your search criteria."
-                : "No exams are available at the moment."}
-            </p>
-            {canManage && !search && examType === "all" && (
-              <Button asChild>
-                <Link href="/exams/create">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create First Exam
-                </Link>
-              </Button>
+
+            {hasNextPage && (
+              <div className="flex justify-center mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage((prev) => prev + 1)}
+                  disabled={isLoadingExams}
+                >
+                  Load More
+                </Button>
+              </div>
             )}
-          </CardContent>
-        </Card>
-      )}
+          </>
+        ) : (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <BookOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-semibold mb-2">No exams found</h3>
+              <p className="text-muted-foreground mb-4">
+                {search || examType !== "all"
+                  ? "No exams match your search criteria."
+                  : "No exams are available at the moment."}
+              </p>
+              {canManage && !search && examType === "all" && (
+                <Button asChild>
+                  <Link href="/exams/create">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Exam
+                  </Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }

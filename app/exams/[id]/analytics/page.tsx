@@ -81,12 +81,15 @@ export default function ExamAnalyticsPage() {
             <p className="text-destructive">
               You don't have permission to view exam analytics.
             </p>
-            <Button asChild className="mt-4">
-              <Link href="/exams">
+            <Link href="/exams">
+              <Button
+                asChild
+                className="mt-4 flex items-center hover:cursor-pointer"
+              >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Exams
-              </Link>
-            </Button>
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
@@ -239,12 +242,16 @@ export default function ExamAnalyticsPage() {
                   </>
                 )}
               </Button>
-              <Button variant="outline" asChild>
-                <Link href={`/exams/${id}`}>
+              <Link href={`/exams/${id}`}>
+                <Button
+                  variant="outline"
+                  asChild
+                  className="flex items-center hover:cursor-pointer"
+                >
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Exam
-                </Link>
-              </Button>
+                </Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
@@ -259,12 +266,16 @@ export default function ExamAnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <Button variant="ghost" asChild className="mb-4">
-            <Link href={`/exams/${id}`}>
+          <Link href={`/exams/${id}`}>
+            <Button
+              variant="ghost"
+              asChild
+              className="mb-4 flex items-center hover:cursor-pointer"
+            >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Exam
-            </Link>
-          </Button>
+            </Button>
+          </Link>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <BarChart3 className="h-8 w-8" />
             Exam Analytics
@@ -401,10 +412,18 @@ export default function ExamAnalyticsPage() {
       {/* Main Analytics Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="participants">Participants</TabsTrigger>
-          <TabsTrigger value="questions">Questions</TabsTrigger>
-          <TabsTrigger value="insights">Insights</TabsTrigger>
+          <TabsTrigger value="overview" className="hover:cursor-pointer">
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="participants" className="hover:cursor-pointer">
+            Participants
+          </TabsTrigger>
+          <TabsTrigger value="questions" className="hover:cursor-pointer">
+            Questions
+          </TabsTrigger>
+          <TabsTrigger value="insights" className="hover:cursor-pointer">
+            Insights
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">

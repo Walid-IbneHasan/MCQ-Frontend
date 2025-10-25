@@ -8,7 +8,12 @@ import {
   useGetUsersQuery,
   useDeleteUserMutation,
 } from "../../lib/store/api/usersApi";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
@@ -64,7 +69,11 @@ export default function UsersPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
-  const { data, isLoading: isLoadingData, refetch } = useGetUsersQuery({
+  const {
+    data,
+    isLoading: isLoadingData,
+    refetch,
+  } = useGetUsersQuery({
     search: debouncedSearch,
     role: roleFilter === "all" ? undefined : roleFilter,
     is_active: statusFilter === "all" ? undefined : statusFilter,
@@ -107,7 +116,9 @@ export default function UsersPage() {
       <div className="container mx-auto p-6">
         <Card>
           <CardContent className="p-6 text-center">
-            <p className="text-destructive">You don't have permission to manage users.</p>
+            <p className="text-destructive">
+              You don't have permission to manage users.
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -115,7 +126,11 @@ export default function UsersPage() {
   }
 
   const handleDelete = async (id: string, userName: string) => {
-    if (confirm(`Are you sure you want to delete user "${userName}"? This action cannot be undone.`)) {
+    if (
+      confirm(
+        `Are you sure you want to delete user "${userName}"? This action cannot be undone.`
+      )
+    ) {
       try {
         await deleteUser(id).unwrap();
         toast({
@@ -295,6 +310,11 @@ export default function UsersPage() {
                         <TableCell>
                           <Badge
                             variant={usr.is_active ? "default" : "secondary"}
+                            className={
+                              usr.is_active
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }
                           >
                             {usr.is_active ? "Active" : "Inactive"}
                           </Badge>
@@ -310,13 +330,18 @@ export default function UsersPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleEdit(usr.id)}>
+                              <DropdownMenuItem
+                                onClick={() => handleEdit(usr.id)}
+                              >
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() =>
-                                  handleDelete(usr.id, usr.full_name || usr.phone_number)
+                                  handleDelete(
+                                    usr.id,
+                                    usr.full_name || usr.phone_number
+                                  )
                                 }
                                 className="text-destructive"
                                 disabled={isDeleting || usr.id === user.id}

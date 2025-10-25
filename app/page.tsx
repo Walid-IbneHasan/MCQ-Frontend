@@ -53,9 +53,11 @@ export default function HomePage() {
               studies with our comprehensive online examination platform.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center animate-fade-in">
-              <Button size="lg" asChild>
-                <Link href={ROUTES.REGISTER}>Get Started Free</Link>
-              </Button>
+              <Link href={ROUTES.REGISTER}>
+                <Button size="lg" asChild className="hover:cursor-pointer">
+                  Get Started Free
+                </Button>
+              </Link>
               <Button size="lg" variant="outline" asChild>
                 <Link href={ROUTES.LOGIN}>Sign In</Link>
               </Button>
@@ -111,9 +113,11 @@ export default function HomePage() {
               Join thousands of students who are already improving their
               knowledge with our platform.
             </p>
-            <Button size="lg" asChild>
-              <Link href={ROUTES.REGISTER}>Create Your Account</Link>
-            </Button>
+            <Link href={ROUTES.REGISTER}>
+              <Button size="lg" asChild className="hover:cursor-pointer">
+                Create Your Account
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

@@ -15,6 +15,8 @@ import {
   Trophy,
   BarChart3,
   X,
+  HelpCircle,
+  Users,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { ThemeToggle } from "../ui/theme-toggle";
@@ -69,6 +71,7 @@ export function Navbar() {
       { href: "/leaderboards", label: "Leaderboards", icon: Trophy },
     ];
 
+    // Questions and Question Sets - for Teacher, Moderator, Admin only
     if (
       user?.role &&
       [USER_ROLES.TEACHER, USER_ROLES.MODERATOR, USER_ROLES.ADMIN].includes(
@@ -76,11 +79,16 @@ export function Navbar() {
       )
     ) {
       items.push(
-        { href: "/questions", label: "Questions", icon: BookOpen },
-        { href: "/users", label: "Users", icon: User },
+        { href: "/questions", label: "Questions", icon: HelpCircle },
         { href: "/question-sets", label: "Question Sets", icon: BookOpen }
       );
     }
+
+    // Users - for Admin only
+    if (user?.role === USER_ROLES.ADMIN) {
+      items.push({ href: "/users", label: "Users", icon: Users });
+    }
+
     return items;
   }, [user?.role]);
 
@@ -100,12 +108,16 @@ export function Navbar() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" asChild>
-              <Link href={ROUTES.LOGIN}>Sign In</Link>
-            </Button>
-            <Button asChild>
-              <Link href={ROUTES.REGISTER}>Sign Up</Link>
-            </Button>
+            <Link href={ROUTES.LOGIN}>
+              <Button variant="ghost" asChild className="hover:cursor-pointer">
+                Sign In
+              </Button>
+            </Link>
+            <Link href={ROUTES.REGISTER}>
+              <Button asChild className="hover:cursor-pointer">
+                Sign Up
+              </Button>
+            </Link>
           </div>
         </div>
       </nav>

@@ -219,12 +219,20 @@ export default function LeaderboardsPage() {
 
           {leaderboardId && (
             <div className="pt-3 border-t">
-              <Button variant="outline" size="sm" asChild className="w-full">
-                <Link href={`/leaderboards/${leaderboardId}`}>
+              <Link
+                href={`/leaderboards/${leaderboardId}`}
+                className="hover:cursor-pointer"
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  className="w-full flex items-center"
+                >
                   View Full Leaderboard
                   <ChevronRight className="h-4 w-4 ml-2" />
-                </Link>
-              </Button>
+                </Button>
+              </Link>
             </div>
           )}
         </div>

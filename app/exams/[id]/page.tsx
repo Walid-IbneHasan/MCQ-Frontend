@@ -1,4 +1,4 @@
-// app/exams/[id]/page.tsx - Updated with analytics link
+// app/exams/[id]/page.tsx - FIXED
 "use client";
 
 import React from "react";
@@ -41,25 +41,32 @@ import { USER_ROLES } from "../../../lib/utils/constants";
 export default function ExamDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user, requireAuth } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToastContext();
 
+  // State must be declared before any conditional returns
   const [customDuration, setCustomDuration] = React.useState<
     number | undefined
   >(undefined);
   const [showCustomDuration, setShowCustomDuration] = React.useState(false);
 
-  if (!requireAuth()) {
-    return null;
-  }
-
+  // API hooks must be called before conditional returns
   const {
     data: examResponse,
     isLoading,
     error,
-  } = useGetExamQuery(id as string);
+  } = useGetExamQuery(id as string, {
+    skip: !user, // Skip query if no user
+  });
 
   const [startExam, { isLoading: isStarting }] = useStartExamMutation();
+
+  // Auth redirect in useEffect
+  React.useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, authLoading, router]);
 
   const canManage =
     user?.role &&
@@ -82,7 +89,6 @@ export default function ExamDetailPage() {
         variant: "success",
       });
 
-      // Navigate to exam session
       router.push(`/exams/session/${result.session.id}`);
     } catch (error: any) {
       toast({
@@ -130,6 +136,23 @@ export default function ExamDetailPage() {
     return `${mins}m`;
   };
 
+  // Loading state - after all hooks
+  if (authLoading) {
+    return (
+      <div className="container mx-auto p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-8 bg-muted rounded w-1/3" />
+          <div className="h-64 bg-muted rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  // Auth check - after all hooks
+  if (!user) {
+    return null;
+  }
+
   if (isLoading) {
     return (
       <div className="container mx-auto p-6">
@@ -148,12 +171,15 @@ export default function ExamDetailPage() {
         <Card>
           <CardContent className="p-6 text-center">
             <p className="text-destructive">Failed to load exam details.</p>
-            <Button asChild className="mt-4">
-              <Link href="/exams">
+            <Link href="/exams">
+              <Button
+                asChild
+                className="mt-4 flex items-center hover:cursor-pointer"
+              >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Exams
-              </Link>
-            </Button>
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
@@ -165,12 +191,16 @@ export default function ExamDetailPage() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Back Button */}
-      <Button variant="ghost" asChild>
-        <Link href="/exams">
+      <Link href="/exams">
+        <Button
+          variant="ghost"
+          className="flex items-center hover:cursor-pointer"
+          asChild
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Exams
-        </Link>
-      </Button>
+        </Button>
+      </Link>
 
       {/* Exam Header */}
       <Card>
@@ -208,18 +238,27 @@ export default function ExamDetailPage() {
             </div>
             {canManage && (
               <div className="flex gap-2">
-                <Button asChild variant="outline" size="sm">
-                  <Link href={`/exams/${exam.id}/edit`}>
+                <Link href={`/exams/${exam.id}/edit`}>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center hover:cursor-pointer"
+                  >
                     <Settings className="h-4 w-4 mr-1" />
                     Edit
-                  </Link>
-                </Button>
-                <Button asChild size="sm">
-                  <Link href={`/exams/${exam.id}/analytics`}>
+                  </Button>
+                </Link>
+                <Link href={`/exams/${exam.id}/analytics`}>
+                  <Button
+                    asChild
+                    size="sm"
+                    className="flex items-center hover:cursor-pointer"
+                  >
                     <BarChart3 className="h-4 w-4 mr-1" />
                     Analytics
-                  </Link>
-                </Button>
+                  </Button>
+                </Link>
               </div>
             )}
           </div>
@@ -518,7 +557,7 @@ export default function ExamDetailPage() {
                   isStarting ||
                   !!can_attempt.active_session_id
                 }
-                className="w-full"
+                className="w-full hover:cursor-pointer"
                 size="lg"
               >
                 {isStarting ? (

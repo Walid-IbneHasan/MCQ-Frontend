@@ -2,7 +2,7 @@ import { useAppSelector, useAppDispatch } from '../lib/store/hooks';
 import { useRouter } from 'next/navigation';
 import { logout, initializeAuth } from '../lib/store/slices/authSlice';
 import { useLogoutMutation } from '../lib/store/api/authApi';
-import { useEffect } from 'react';
+import { useEffect,useState } from 'react';
 import { ROUTES } from '../lib/utils/constants';
 
 export const useAuth = () => {
@@ -10,9 +10,14 @@ export const useAuth = () => {
   const router = useRouter();
   const auth = useAppSelector((state) => state.auth);
   const [logoutMutation] = useLogoutMutation();
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    dispatch(initializeAuth());
+    const initialize = async () => {
+      await dispatch(initializeAuth());
+      setIsInitialized(true);
+    };
+    initialize();
   }, [dispatch]);
 
   const handleLogout = async () => {
@@ -52,6 +57,7 @@ export const useAuth = () => {
 
   return {
     ...auth,
+    isLoading: !isInitialized,
     logout: handleLogout,
     requireAuth,
     requireRole,
